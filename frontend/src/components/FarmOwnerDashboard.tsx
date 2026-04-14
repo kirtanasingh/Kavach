@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -39,10 +40,58 @@ import {
   ChevronRight,
   Pill,
   TrendingUp,
+  Trash2,
 } from 'lucide-react';
 import logoImg from 'figma:asset/28cc7f8b67ba61bb13e03c30f73fd05e9d3d8a2c.png';
+import { analyzeImage } from '../services/diseaseDetectionService';
+
+const DETECTION_HISTORY_STORAGE_KEY = 'farmOwnerDetectionHistory';
+
+type DetectionSeverity = 'High' | 'Medium' | 'Low' | 'Unknown';
+type DetectionAnimalType = 'pig' | 'poultry';
+
+interface DetectionHistoryItem {
+  id: string;
+  disease: string;
+  confidence: number;
+  severity: DetectionSeverity;
+  animalType: DetectionAnimalType;
+  status: string;
+  recommendation: string;
+  image: string;
+  date: string;
+}
+
+const mapSeverityToLabel = (severity?: string): DetectionSeverity => {
+  switch ((severity ?? '').toLowerCase()) {
+    case 'severe':
+    case 'high':
+    case 'critical':
+      return 'High';
+    case 'moderate':
+    case 'medium':
+      return 'Medium';
+    case 'mild':
+    case 'low':
+      return 'Low';
+    default:
+      return 'Unknown';
+  }
+};
+
+const loadDetectionHistory = (): DetectionHistoryItem[] => {
+  try {
+    const raw = localStorage.getItem(DETECTION_HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 interface FarmOwnerDashboardProps {
+  initialNav?: 'home' | 'detection' | 'tasks' | 'records' | 'alerts' | 'compliance' | 'reports';
   onNavigate?: (view: string) => void;
   onLogout?: () => void;
   userName?: string;
@@ -52,12 +101,38 @@ interface FarmOwnerDashboardProps {
   onAddTask?: (newTask: any) => void;
 }
 
-export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = '' }: FarmOwnerDashboardProps) {
-  const [activeNav, setActiveNav] = useState('home');
+export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, onLogout, userName = '' }: FarmOwnerDashboardProps) {
+  const navigate = useNavigate();
+  const [activeNav, setActiveNav] = useState(initialNav);
   const [notificationCount] = useState(5);
   const [taskTab, setTaskTab] = useState<'today' | 'upcoming' | 'completed'>('today');
   const [recordTab, setRecordTab] = useState<'animals' | 'treatments' | 'compliance'>('animals');
   const [alertFilter, setAlertFilter] = useState<'all' | 'outbreak' | 'vet' | 'system'>('all');
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [animalType, setAnimalType] = useState<'Pig' | 'Poultry'>('Pig');
+  const [loading, setLoading] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [detectionHistory, setDetectionHistory] = useState<DetectionHistoryItem[]>(() => loadDetectionHistory());
+  const [historyAnimalFilter, setHistoryAnimalFilter] = useState<'all' | 'pig' | 'poultry'>('all');
+  const [historySeverityFilter, setHistorySeverityFilter] = useState<'all' | 'High' | 'Medium' | 'Low' | 'Unknown'>('all');
+
+  useEffect(() => {
+    setActiveNav(initialNav);
+  }, [initialNav]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  useEffect(() => {
+    localStorage.setItem(DETECTION_HISTORY_STORAGE_KEY, JSON.stringify(detectionHistory));
+  }, [detectionHistory]);
 
   // Mock Data
   const stats = {
@@ -66,12 +141,6 @@ export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = ''
     complianceRate: 94,
     pendingTasks: 12,
   };
-
-  const recentDetections: any[] = [
-    { id: 1, animal: 'Pig #2847', type: 'Swine Flu Symptoms', disease: 'Swine Flu Symptoms', severity: 'High', timestamp: '2 hours ago', confidence: 87, status: 'Under Review', vetStatus: 'Under Review', image: '🐷', date: '4 Apr 2026' },
-    { id: 2, animal: 'Chicken #1923', type: 'Newcastle Disease', disease: 'Newcastle Disease', severity: 'Critical', timestamp: '5 hours ago', confidence: 92, status: 'Vet Confirmed', vetStatus: 'Confirmed', image: '🐔', date: '4 Apr 2026' },
-    { id: 3, animal: 'Pig #2718', type: 'Skin Lesions', disease: 'Skin Lesions', severity: 'Medium', timestamp: '1 day ago', confidence: 78, status: 'Testing', vetStatus: 'Testing', image: '🐷', date: '3 Apr 2026' },
-  ];
 
   const todayTasks: any[] = [
     { id: 1, task: 'Clean Building A Shed', title: 'Clean Building A Shed', description: 'Thorough cleaning and disinfection of all surfaces', assignedTo: 'Ramesh Kumar', assignee: 'Ramesh Kumar', assigneeAvatar: 'RK', priority: 'High', due: '10:00 AM', dueDate: '10:00 AM', status: 'In Progress' },
@@ -200,7 +269,93 @@ export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = ''
   };
 
   const handleNavClick = (navId: string) => {
+    if (navId === 'detection') {
+      // Keep detection tab responsive even when already on /dashboard/vlm.
+      setActiveNav('detection');
+      navigate('/dashboard/vlm');
+      return;
+    }
     setActiveNav(navId);
+  };
+
+  const handleAnalyze = async () => {
+    console.log('BUTTON CLICKED');
+
+    if (!file) {
+      alert('Upload image first');
+      return;
+    }
+
+    setLoading(true);
+    setAnalysisError(null);
+
+    try {
+      const result = await analyzeImage(file, animalType);
+      console.log('API RESPONSE RECEIVED', result);
+      setAnalysisResult(result);
+
+      const historyItem: DetectionHistoryItem = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        disease: result.disease || 'Unknown',
+        confidence: Math.round((result.confidence ?? 0) * 100),
+        severity: mapSeverityToLabel(result.severity),
+        animalType: animalType.toLowerCase() as DetectionAnimalType,
+        status: result.requires_vet ? 'Pending' : 'Completed',
+        recommendation: result.recommendation ?? '',
+        image: animalType === 'Pig' ? '🐷' : '🐔',
+        date: new Date().toLocaleString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      };
+
+      setDetectionHistory((prev) => [historyItem, ...prev]);
+    } catch (err: any) {
+      console.error(err);
+      setAnalysisError(err?.message ?? 'Analysis failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileSelect = (selected: File | null) => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setFile(selected);
+    setAnalysisResult(null);
+    setAnalysisError(null);
+
+    if (selected && !selected.type.startsWith('image/')) {
+      setFile(null);
+      setPreviewUrl(null);
+      setAnalysisError('Invalid image: please upload a pig or poultry photo.');
+      return;
+    }
+    setPreviewUrl(selected ? URL.createObjectURL(selected) : null);
+    console.log('FILE SELECTED', selected?.name ?? 'none');
+  };
+
+  const handleScanAnother = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setFile(null);
+    setPreviewUrl(null);
+    setAnalysisResult(null);
+    setAnalysisError(null);
+    setLoading(false);
+  };
+
+  const handleDeleteHistoryItem = (id: string) => {
+    setDetectionHistory((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleClearHistory = () => {
+    setDetectionHistory([]);
   };
 
   const menuItems = [
@@ -215,6 +370,11 @@ export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = ''
 
   const filteredAlerts = alertFilter === 'all' ? alerts : alerts.filter(a => a.type === alertFilter);
   const currentTasks = taskTab === 'today' ? todayTasks : taskTab === 'upcoming' ? upcomingTasks : completedTasks;
+  const filteredDetectionHistory = detectionHistory.filter((item) => {
+    const animalTypeMatch = historyAnimalFilter === 'all' || item.animalType === historyAnimalFilter;
+    const severityMatch = historySeverityFilter === 'all' || item.severity === historySeverityFilter;
+    return animalTypeMatch && severityMatch;
+  });
 
   // Render content based on active navigation
   const renderContent = () => {
@@ -325,14 +485,19 @@ export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = ''
                 <p className="text-sm font-medium text-gray-900 mb-1">Upload Image/Video</p>
                 <p className="text-xs text-[#7A7A6E]">JPG, PNG, MP4 • Max 25MB</p>
               </div>
-              <Button className="w-full bg-[#1B5E42] hover:bg-[#164E36] text-white rounded-lg py-3">
+              <Button onClick={() => navigate('/dashboard/vlm')} className="w-full bg-[#1B5E42] hover:bg-[#164E36] text-white rounded-lg py-3">
                 Start Detection
               </Button>
 
               {/* Recent Detections */}
               <div className="pt-4 space-y-3">
                 <h4 className="text-sm font-medium text-gray-900">Recent Detections</h4>
-                {recentDetections.slice(0, 2).map(detection => (
+                {detectionHistory.length === 0 && (
+                  <div className="p-3 bg-[#F7F5F0] rounded-lg text-xs text-[#7A7A6E]">
+                    No detections yet. Run a scan to populate history.
+                  </div>
+                )}
+                {detectionHistory.slice(0, 2).map(detection => (
                   <div key={detection.id} className="flex items-center gap-3 p-3 bg-[#F7F5F0] rounded-lg hover:shadow-sm transition-shadow cursor-pointer">
                     <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center text-2xl">
                       {detection.image}
@@ -580,31 +745,135 @@ export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = ''
           </CardTitle>
         </CardHeader>
         <CardContent className="p-8">
-          <div className="border-2 border-dashed border-[#4CAF7D]/50 bg-[#F7F5F0] rounded-xl p-12 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-[#E5E3DC]/30 transition-colors">
-            <div className="w-20 h-20 rounded-full bg-[#1B5E42]/10 flex items-center justify-center mb-4">
-              <Upload className="w-10 h-10 text-[#1B5E42]" />
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-900 mb-2 block">Select Animal Type</label>
+              <select
+                value={animalType}
+                onChange={(e) => setAnimalType(e.target.value as 'Pig' | 'Poultry')}
+                className="w-full h-11 px-3 rounded-lg border border-[#E5E3DC]"
+              >
+                <option value="Pig">Pig</option>
+                <option value="Poultry">Poultry</option>
+              </select>
             </div>
-            <p className="text-lg font-medium text-gray-900 mb-2">Upload Image or Video</p>
-            <p className="text-sm text-[#7A7A6E] mb-4">Click to browse or drag and drop files here</p>
-            <p className="text-xs text-[#7A7A6E]">Supported formats: JPG, PNG, MP4, MOV • Max file size: 25MB</p>
+
+            <div className="border-2 border-dashed border-[#4CAF7D]/50 bg-[#F7F5F0] rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-[#E5E3DC]/30 transition-colors">
+              <div className="w-20 h-20 rounded-full bg-[#1B5E42]/10 flex items-center justify-center mb-4">
+                <Upload className="w-10 h-10 text-[#1B5E42]" />
+              </div>
+              <p className="text-lg font-medium text-gray-900 mb-2">Upload Image</p>
+              <p className="text-sm text-[#7A7A6E] mb-4">Choose an animal image to analyze</p>
+              <input
+                id="detection-image-upload"
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="mb-3"
+                onClick={() => document.getElementById('detection-image-upload')?.click()}
+              >
+                Upload Image
+              </Button>
+              {file && <p className="text-xs text-[#1B5E42] mt-2">Selected: {file.name}</p>}
+              {previewUrl && (
+                <img
+                  src={previewUrl}
+                  alt="Uploaded preview"
+                  className="mt-3 w-full max-w-sm max-h-64 object-cover rounded-lg border border-[#E5E3DC]"
+                />
+              )}
+            </div>
+
+            <Button
+              onClick={handleAnalyze}
+              disabled={loading}
+              className="w-full mt-2 bg-[#1B5E42] hover:bg-[#164E36] text-white rounded-lg py-3 text-base"
+            >
+              {loading ? 'Analyzing...' : 'Start Analyzing'}
+            </Button>
+
+            {analysisError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                {analysisError}
+              </div>
+            )}
+
+            {analysisResult && (
+              <div className="p-4 rounded-lg bg-[#F7F5F0] border border-[#E5E3DC]">
+                <p className="text-sm text-gray-700"><span className="font-semibold">Disease:</span> {analysisResult.disease}</p>
+                <p className="text-sm text-gray-700"><span className="font-semibold">Confidence:</span> {Math.round((analysisResult.confidence ?? 0) * 100)}%</p>
+                <p className="text-sm text-gray-700"><span className="font-semibold">Severity:</span> {analysisResult.severity}</p>
+                <p className="text-sm text-gray-700"><span className="font-semibold">Recommendation:</span> {analysisResult.recommendation}</p>
+                <Button
+                  onClick={handleScanAnother}
+                  variant="outline"
+                  className="mt-4"
+                >
+                  Scan Another Image
+                </Button>
+              </div>
+            )}
           </div>
-          <Button className="w-full mt-6 bg-[#1B5E42] hover:bg-[#164E36] text-white rounded-lg py-3 text-base">
-            Start Detection Analysis
-          </Button>
         </CardContent>
       </Card>
 
       {/* Detection History */}
       <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
         <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
-          <CardTitle className="flex items-center gap-2 text-gray-900">
-            <FileText className="w-5 h-5 text-[#1B5E42]" />
-            Detection History
-          </CardTitle>
+          <div className="flex flex-col gap-3">
+            <CardTitle className="flex items-center gap-2 text-gray-900">
+              <FileText className="w-5 h-5 text-[#1B5E42]" />
+              Detection History
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-[#7A7A6E]" />
+                <select
+                  value={historyAnimalFilter}
+                  onChange={(e) => setHistoryAnimalFilter(e.target.value as 'all' | 'pig' | 'poultry')}
+                  className="h-9 px-2 rounded-lg border border-[#E5E3DC] text-sm"
+                >
+                  <option value="all">All Animals</option>
+                  <option value="pig">Pig</option>
+                  <option value="poultry">Poultry</option>
+                </select>
+              </div>
+              <select
+                value={historySeverityFilter}
+                onChange={(e) => setHistorySeverityFilter(e.target.value as 'all' | 'High' | 'Medium' | 'Low' | 'Unknown')}
+                className="h-9 px-2 rounded-lg border border-[#E5E3DC] text-sm"
+              >
+                <option value="all">All Severity</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+                <option value="Unknown">Unknown</option>
+              </select>
+              <Button
+                variant="outline"
+                className="h-9"
+                disabled={detectionHistory.length === 0}
+                onClick={handleClearHistory}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Clear History
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-6">
           <div className="space-y-4">
-            {recentDetections.map(detection => (
+            {filteredDetectionHistory.length === 0 && (
+              <div className="p-4 bg-[#F7F5F0] rounded-xl text-sm text-[#7A7A6E]">
+                No detection records match your filter.
+              </div>
+            )}
+            {filteredDetectionHistory.map(detection => (
               <div key={detection.id} className="p-4 bg-[#F7F5F0] rounded-xl hover:shadow-md transition-shadow cursor-pointer">
                 <div className="flex items-start gap-4">
                   <div className="w-20 h-20 bg-white rounded-lg flex items-center justify-center text-4xl flex-shrink-0">
@@ -614,7 +883,7 @@ export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = ''
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <p className="font-medium text-gray-900">{detection.disease}</p>
-                        <p className="text-xs text-[#7A7A6E] mt-1">Submitted on {detection.date}</p>
+                        <p className="text-xs text-[#7A7A6E] mt-1">Scanned on {detection.date} ({detection.animalType})</p>
                       </div>
                       <Badge className={`${getSeverityStyle(detection.severity)} px-3 py-1 text-xs rounded-full`}>
                         {detection.severity}
@@ -626,20 +895,25 @@ export default function FarmOwnerDashboard({ onNavigate, onLogout, userName = ''
                         <span className="font-medium text-gray-900">{detection.confidence}%</span>
                       </div>
                       <div>
-                        <span className="text-[#7A7A6E]">Vet Status: </span>
-                        <Badge className={`${getStatusStyle(detection.vetStatus)} px-2 py-0.5 text-xs rounded-full ml-1`}>
-                          {detection.vetStatus}
+                        <span className="text-[#7A7A6E]">Status: </span>
+                        <Badge className={`${getStatusStyle(detection.status)} px-2 py-0.5 text-xs rounded-full ml-1`}>
+                          {detection.status}
                         </Badge>
                       </div>
                     </div>
-                    {detection.vetNote && (
+                    {detection.recommendation && (
                       <div className="mt-2 p-2 bg-white rounded-lg text-xs text-[#7A7A6E]">
-                        <span className="font-medium text-gray-900">Vet Note:</span> {detection.vetNote}
+                        <span className="font-medium text-gray-900">Recommendation:</span> {detection.recommendation}
                       </div>
                     )}
                   </div>
-                  <Button variant="ghost" size="sm" className="text-[#1B5E42]">
-                    <Eye className="w-4 h-4" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-[#C0392B] hover:text-[#C0392B]"
+                    onClick={() => handleDeleteHistoryItem(detection.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               </div>

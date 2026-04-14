@@ -68,12 +68,30 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
   useEffect(() => {
     const token = localStorage.getItem('token') || '';
     const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const API_URL = `${API_BASE}/api/v1`;
     
-    fetch(`${API_BASE}/detections?status=pending_review`, {
+    fetch(`${API_URL}/detections?status=pending_review`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
-      .then(setVlmQueue)
+      .then(data => {
+        // Map backend detection format to UI format
+        const mappedData = data.map((item: any) => ({
+          id: item.case_id,
+          farm: item.metadata?.farm_name || 'Unknown Farm',
+          farmer: item.metadata?.farmer_name || 'Unknown Farmer',
+          animal: item.metadata?.animal_id || 'Unknown Animal',
+          uploadDate: item.created_at,
+          aiDiagnosis: item.ai_diagnosis,
+          disease: item.ai_diagnosis,
+          confidence: Math.round((item.confidence || 0) * 100),
+          status: 'Pending Review',
+          priority: item.triage_score === 'HIGH' ? 'High' : item.triage_score === 'MEDIUM' ? 'Medium' : 'Low',
+          thumbnail: item.metadata?.species === 'Poultry' ? '🐔' : item.metadata?.species === 'Pig' ? '🐷' : '🐄',
+          species: item.metadata?.species || 'Unknown'
+        }));
+        setVlmQueue(mappedData);
+      })
       .catch(() => {
         // Fallback to mock data
         setVlmQueue([
@@ -152,9 +170,10 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
   const handleVLMAccept = async (caseId: number) => {
     const token = localStorage.getItem('token') || '';
     const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const API_URL = `${API_BASE}/api/v1`;
     
     try {
-      await fetch(`${API_BASE}/annotations/${caseId}`, {
+      await fetch(`${API_URL}/annotations/${caseId}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -178,9 +197,10 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
     
     const token = localStorage.getItem('token') || '';
     const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const API_URL = `${API_BASE}/api/v1`;
     
     try {
-      await fetch(`${API_BASE}/annotations/${caseId}`, {
+      await fetch(`${API_URL}/annotations/${caseId}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

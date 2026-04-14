@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -41,6 +42,7 @@ interface FarmOwnerDesktopDashboardProps {
 }
 
 export default function FarmOwnerDesktopDashboard({ onNavigate }: FarmOwnerDesktopDashboardProps) {
+  const navigate = useNavigate();
   const [activeNav, setActiveNav] = useState('dashboard');
   const [notificationCount] = useState(5);
 
@@ -122,6 +124,10 @@ export default function FarmOwnerDesktopDashboard({ onNavigate }: FarmOwnerDeskt
   };
 
   const handleNavClick = (navId: string) => {
+    if (navId === 'detection') {
+      navigate('/dashboard/vlm');
+      return;
+    }
     setActiveNav(navId);
     if (onNavigate) {
       onNavigate(navId);
@@ -292,7 +298,7 @@ export default function FarmOwnerDesktopDashboard({ onNavigate }: FarmOwnerDeskt
                     <p className="text-sm font-medium text-gray-900 mb-1">Upload Image/Video</p>
                     <p className="text-xs text-[#7A7A6E]">Click to upload or drag and drop animal photos or videos</p>
                   </div>
-                  <Button className="w-full bg-[#1B5E42] hover:bg-[#164E36] text-white rounded-lg py-3">
+                  <Button onClick={() => navigate('/dashboard/vlm')} className="w-full bg-[#1B5E42] hover:bg-[#164E36] text-white rounded-lg py-3">
                     Start Detection
                   </Button>
                 </CardContent>

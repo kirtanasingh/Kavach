@@ -1,32 +1,45 @@
-// services/diseaseDetectionService.ts
-
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = `${API_BASE}/api/v1`;
 
-export async function uploadForDetection(
-  file: File,
-  animalType: string,
-  token: string
-): Promise<{ job_id: string }> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('animal_type', animalType);
-
-  const res = await fetch(`${API_BASE}/detections/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  });
-  if (!res.ok) throw new Error('Upload failed');
-  return res.json();
+export interface VLMAnalysisResult {
+  disease: string;
+  confidence: number;
+  severity: 'mild' | 'moderate' | 'severe' | 'none' | 'unknown';
+  visual_indicators: string[];
+  recommendation: string;
+  requires_vet: boolean;
+  source: 'groq_vlm' | 'fallback';
+  fallback_reason?: string;
 }
 
-export async function pollDetectionStatus(
-  jobId: string,
-  token: string
-): Promise<{ status: 'processing' | 'done' | 'failed'; result: any }> {
-  const res = await fetch(`${API_BASE}/detections/${jobId}/status`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error('Poll failed');
-  return res.json();
+/**
+ * Upload image for VLM analysis.
+ */
+export async function analyzeImage(
+  file: File,
+  animalType: string
+): Promise<VLMAnalysisResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('animal_type', animalType.toLowerCase());
+
+  try {
+    const res = await fetch(`${API_URL}/detect`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const errorMsg = errorData.detail || `API error: ${res.status} ${res.statusText}`;
+      throw new Error(errorMsg);
+    }
+    
+    return res.json();
+  } catch (error: any) {
+    if (error.message === 'Failed to fetch') {
+      throw new Error('Cannot connect to backend. Make sure http://localhost:8000 is running.');
+    }
+    throw error;
+  }
 }
