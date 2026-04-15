@@ -7,7 +7,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1.endpoints import scan, detections
+from app.api.v1.endpoints import scan, detections, ml_classify
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(scan.router, prefix=settings.API_V1_STR, tags=["scan"])
 app.include_router(detections.router, prefix=settings.API_V1_STR, tags=["detections"])
+app.include_router(ml_classify.router, prefix=settings.API_V1_STR, tags=["ml"])
 
 
 @app.on_event("startup")

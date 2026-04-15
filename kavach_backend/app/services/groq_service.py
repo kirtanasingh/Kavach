@@ -35,6 +35,13 @@ CANONICAL_DISEASES: dict[str, list[str]] = {
         "Fowl Pox",
         "Healthy (no disease detected)",
     ],
+    "cattle": [
+        "Lumpy Skin Disease",
+        "Foot and Mouth Disease",
+        "Mastitis",
+        "Dermatophilosis",
+        "Healthy (no disease detected)",
+    ],
 }
 
 DISEASE_ALIASES: dict[str, dict[str, str]] = {
@@ -59,6 +66,17 @@ DISEASE_ALIASES: dict[str, dict[str, str]] = {
         "marek": "Marek's Disease",
         "coccidiosis": "Coccidiosis",
         "fowl pox": "Fowl Pox",
+        "healthy": "Healthy (no disease detected)",
+        "normal": "Healthy (no disease detected)",
+        "no disease": "Healthy (no disease detected)",
+    },
+    "cattle": {
+        "lumpy skin": "Lumpy Skin Disease",
+        "lsd": "Lumpy Skin Disease",
+        "foot-and-mouth disease": "Foot and Mouth Disease",
+        "foot and mouth": "Foot and Mouth Disease",
+        "mastitis": "Mastitis",
+        "dermatophilosis": "Dermatophilosis",
         "healthy": "Healthy (no disease detected)",
         "normal": "Healthy (no disease detected)",
         "no disease": "Healthy (no disease detected)",
@@ -131,12 +149,13 @@ Expected animal category: {expected_animal_type}.
 
 Decide whether this image is a real animal photo and whether it matches the expected category.
 - Accepted categories: pig, poultry
+- Accepted categories: pig, poultry, cattle
 - Reject objects, people, scenery, text screenshots, logos, and non-animal images.
 
 Return ONLY JSON:
 {{
   "is_animal": <true|false>,
-  "detected_animal_type": "pig|poultry|other|unknown",
+    "detected_animal_type": "pig|poultry|cattle|other|unknown",
   "is_expected_type": <true|false>,
   "reason": "<short reason>"
 }}"""
@@ -233,8 +252,8 @@ async def analyze_image_with_groq(image_path: str, animal_type: str) -> dict:
 
 async def validate_animal_image(image_path: str, expected_animal_type: str) -> tuple[bool, str]:
     expected = expected_animal_type.lower().strip()
-    if expected not in {"pig", "poultry"}:
-        return False, "Only pig and poultry images are supported."
+    if expected not in {"pig", "poultry", "cattle"}:
+        return False, "Only pig, poultry, and cattle images are supported."
 
     api_key = settings.groq_api_key or os.getenv("GROQ_API_KEY", "")
     if not api_key:

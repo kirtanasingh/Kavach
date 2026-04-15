@@ -19,8 +19,8 @@ async def _analyze_upload(file: UploadFile, animal_type: str) -> dict:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
 
     normalized_animal_type = animal_type.strip().lower()
-    if normalized_animal_type not in {"pig", "poultry"}:
-        raise HTTPException(status_code=400, detail="Only pig and poultry are supported.")
+    if normalized_animal_type not in {"pig", "poultry", "cattle"}:
+        raise HTTPException(status_code=400, detail="Only pig, poultry, and cattle are supported.")
 
     os.makedirs(settings.upload_dir, exist_ok=True)
     ext = (file.filename or "upload.jpg").rsplit(".", 1)[-1]
