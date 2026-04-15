@@ -17,7 +17,6 @@ import pathlib
 import random
 import re
 import shutil
-import sys
 from collections import defaultdict
 from typing import DefaultDict, Dict, List, Tuple
 
@@ -26,10 +25,19 @@ from typing import DefaultDict, Dict, List, Tuple
 # Configuration
 # ---------------------------------------------------------------------------
 
-DATASETS: Dict[str, str] = {
-    "pig": "datasets_upload/pig/Pig Skin Disease Single Label v4.v24i.folder",
-    "poultry": "datasets_upload/poultry/PoultryDisease/poultry_diseases",
-    "cattle": "datasets_upload/cattle/cattle",
+DATASETS: Dict[str, List[str]] = {
+    "pig": [
+        "datasets_upload/pig/Pig Skin Disease Single Label v4.v24i.folder",
+    ],
+    "poultry": [
+        "datasets_upload/poultry/Chicken Data.v35i.folder",
+        "datasets_upload/poultry/PoultryDisease/poultry_diseases",
+    ],
+    "cattle": [
+        "datasets_upload/cattle/cattle diseases.v2i.folder",
+        "datasets_upload/cattle/cow/Cows datasets",
+        "datasets_upload/cattle/cattle",
+    ],
 }
 
 SPLIT_RATIOS: Tuple[float, float, float] = (0.70, 0.20, 0.10)  # train/valid/test
@@ -132,7 +140,10 @@ def ingest_with_existing_splits(
         for class_dir in sorted(split_dir.iterdir()):
             if not class_dir.is_dir():
                 continue
-            class_name = f"{prefix}_{class_dir.name}"
+            normalized = normalize_class_name(class_dir.name)
+            if normalized in {"unlabeled", "unlabelled"}:
+                continue
+            class_name = f"{prefix}_{normalized}"
             dst_dir = out_dir / split / class_name
             dst_dir.mkdir(parents=True, exist_ok=True)
             imgs = collect_images(class_dir)
@@ -201,11 +212,14 @@ def ingest_flat_classes(
         print(f"    [WARN] No class sub-folders found in {dataset_dir}, skipping.")
         return counts
     for class_dir in class_dirs:
+        normalized = normalize_class_name(class_dir.name)
+        if normalized in {"unlabeled", "unlabelled"}:
+            continue
         imgs = collect_images(class_dir)
         if not imgs:
             print(f"    [WARN] No images in class folder '{class_dir.name}', skipping.")
             continue
-        class_name = f"{prefix}_{normalize_class_name(class_dir.name)}"
+        class_name = f"{prefix}_{normalized}"
         split_map = split_files(imgs, SPLIT_RATIOS)
         for split, files in split_map.items():
             dst_dir = out_dir / split / class_name
@@ -220,12 +234,10 @@ def ingest_dataset(
     dataset_dir: pathlib.Path,
     prefix: str,
     out_dir: pathlib.Path,
-) -> None:
+) -> bool:
     """Auto-detect structure and delegate to the right ingestion function."""
     if not dataset_dir.exists():
-        print(f"  [ERROR] Dataset folder not found: {dataset_dir}")
-        print("          Make sure it exists at the exact path above.")
-        sys.exit(1)
+        return False
 
     print(f"  Ingesting '{dataset_dir.name}' -> prefix='{prefix}' ...")
 
@@ -244,6 +256,8 @@ def ingest_dataset(
 
     for split, n in counts.items():
         print(f"    {split:6s}: {n} images copied")
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -307,10 +321,18 @@ def main() -> None:
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    for prefix, folder_name in DATASETS.items():
-        dataset_dir = base / folder_name
-        ingest_dataset(dataset_dir, prefix, out)
-        print()
+    for prefix, folder_names in DATASETS.items():
+        found_any = False
+        for folder_name in folder_names:
+            dataset_dir = base / folder_name
+            if ingest_dataset(dataset_dir, prefix, out):
+                found_any = True
+                print()
+        if not found_any:
+            print(f"  [ERROR] No dataset found for prefix '{prefix}'. Checked:")
+            for folder_name in folder_names:
+                print(f"          - {base / folder_name}")
+            print()
 
     print_summary(out)
 

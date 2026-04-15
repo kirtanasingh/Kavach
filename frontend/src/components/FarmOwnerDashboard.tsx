@@ -48,7 +48,7 @@ import { analyzeImage } from '../services/diseaseDetectionService';
 const DETECTION_HISTORY_STORAGE_KEY = 'farmOwnerDetectionHistory';
 
 type DetectionSeverity = 'High' | 'Medium' | 'Low' | 'Unknown';
-type DetectionAnimalType = 'pig' | 'poultry';
+type DetectionAnimalType = 'pig' | 'poultry' | 'cattle';
 
 interface DetectionHistoryItem {
   id: string;
@@ -110,12 +110,12 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
   const [alertFilter, setAlertFilter] = useState<'all' | 'outbreak' | 'vet' | 'system'>('all');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [animalType, setAnimalType] = useState<'Pig' | 'Poultry'>('Pig');
+  const [animalType, setAnimalType] = useState<'Pig' | 'Poultry' | 'Cattle'>('Pig');
   const [loading, setLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [detectionHistory, setDetectionHistory] = useState<DetectionHistoryItem[]>(() => loadDetectionHistory());
-  const [historyAnimalFilter, setHistoryAnimalFilter] = useState<'all' | 'pig' | 'poultry'>('all');
+  const [historyAnimalFilter, setHistoryAnimalFilter] = useState<'all' | 'pig' | 'poultry' | 'cattle'>('all');
   const [historySeverityFilter, setHistorySeverityFilter] = useState<'all' | 'High' | 'Medium' | 'Low' | 'Unknown'>('all');
 
   useEffect(() => {
@@ -302,7 +302,7 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
         animalType: animalType.toLowerCase() as DetectionAnimalType,
         status: result.requires_vet ? 'Pending' : 'Completed',
         recommendation: result.recommendation ?? '',
-        image: animalType === 'Pig' ? '🐷' : '🐔',
+        image: animalType === 'Pig' ? '🐷' : animalType === 'Poultry' ? '🐔' : '🐄',
         date: new Date().toLocaleString('en-GB', {
           day: '2-digit',
           month: 'short',
@@ -332,7 +332,7 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
     if (selected && !selected.type.startsWith('image/')) {
       setFile(null);
       setPreviewUrl(null);
-      setAnalysisError('Invalid image: please upload a pig or poultry photo.');
+      setAnalysisError('Invalid image: please upload a pig, poultry, or cattle photo.');
       return;
     }
     setPreviewUrl(selected ? URL.createObjectURL(selected) : null);
@@ -750,11 +750,12 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
               <label className="text-sm font-medium text-gray-900 mb-2 block">Select Animal Type</label>
               <select
                 value={animalType}
-                onChange={(e) => setAnimalType(e.target.value as 'Pig' | 'Poultry')}
+                onChange={(e) => setAnimalType(e.target.value as 'Pig' | 'Poultry' | 'Cattle')}
                 className="w-full h-11 px-3 rounded-lg border border-[#E5E3DC]"
               >
                 <option value="Pig">Pig</option>
                 <option value="Poultry">Poultry</option>
+                <option value="Cattle">Cattle</option>
               </select>
             </div>
 
@@ -835,12 +836,13 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
                 <Filter className="w-4 h-4 text-[#7A7A6E]" />
                 <select
                   value={historyAnimalFilter}
-                  onChange={(e) => setHistoryAnimalFilter(e.target.value as 'all' | 'pig' | 'poultry')}
+                  onChange={(e) => setHistoryAnimalFilter(e.target.value as 'all' | 'pig' | 'poultry' | 'cattle')}
                   className="h-9 px-2 rounded-lg border border-[#E5E3DC] text-sm"
                 >
                   <option value="all">All Animals</option>
                   <option value="pig">Pig</option>
                   <option value="poultry">Poultry</option>
+                  <option value="cattle">Cattle</option>
                 </select>
               </div>
               <select

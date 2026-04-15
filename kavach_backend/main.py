@@ -5,10 +5,11 @@ import logging
 # Load kavach_backend/.env explicitly so it works from any current working directory.
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.endpoints import scan, detections, ml_classify
 from app.core.config import settings
+from app.services.analysis_service import analyze
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,23 @@ async def startup() -> None:
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Kavach Animal Disease Detection Microservice"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.post("/api/scan")
+async def scan_image(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Must be an image file")
+
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 15MB)")
+
+    return await analyze(data)
 
 if __name__ == "__main__":
     import uvicorn

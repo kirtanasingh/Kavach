@@ -31,10 +31,10 @@ async def _analyze_upload(file: UploadFile, animal_type: str) -> dict:
 
     try:
         is_valid, reason = await validate_animal_image(save_path, normalized_animal_type)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=reason)
-
         result = await run_disease_analysis(save_path, normalized_animal_type)
+        if not is_valid:
+            # Soft-fail validation to avoid false negatives blocking real farm uploads.
+            result["validation_warning"] = reason
     finally:
         if os.path.exists(save_path):
             os.remove(save_path)

@@ -1,0 +1,22 @@
+{
+  "0": "cattle_brd_disease_ecthym",
+  "1": "cattle_contagious_dermatitis_lumpy_skin",
+  "2": "cattle_dermatitis_ecthym_lumpy_skin",
+  "3": "cattle_ecthym_skin",
+  "4": "cattle_foot_and_mouth",
+  "5": "cattle_healthy",
+  "6": "cattle_lumpy",
+  "7": "cattle_lumpy_skin",
+  "8": "pig_healthy",
+  "9": "pig_infected_bacterial_erysipelas",
+  "10": "pig_infected_bacterial_greasy_pig_disease",
+  "11": "pig_infected_environmental_dermatitis",
+  "12": "pig_infected_environmental_sunburn",
+  "13": "pig_infected_fungal_pityriasis_rosea",
+  "14": "pig_infected_fungal_ringworm",
+  "15": "pig_infected_parasitic_mange",
+  "16": "pig_infected_viral_foot_and_mouth_disease",
+  "17": "pig_infected_viral_swinepox",
+  "18": "poultry_healthy",
+  "19": "poultry_unhealthy"
+}

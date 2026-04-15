@@ -1,0 +1,37 @@
+{
+  "num_classes": 19,
+  "classes": [
+    "cattle_coccidiosis",
+    "cattle_healthy",
+    "cattle_new_castle_disease",
+    "cattle_salmonella",
+    "pig_Healthy",
+    "pig_Infected_Bacterial_Erysipelas",
+    "pig_Infected_Bacterial_Greasy_Pig_Disease",
+    "pig_Infected_Environmental_Dermatitis",
+    "pig_Infected_Environmental_Sunburn",
+    "pig_Infected_Fungal_Pityriasis_Rosea",
+    "pig_Infected_Fungal_Ringworm",
+    "pig_Infected_Parasitic_Mange",
+    "pig_Infected_Viral_Foot_and_Mouth_Disease",
+    "pig_Infected_Viral_Swinepox",
+    "pig_Unlabeled",
+    "poultry_cocci",
+    "poultry_healthy",
+    "poultry_ncd",
+    "poultry_salmo"
+  ],
+  "best_valid_acc": 0.31184,
+  "epochs_phase1": 1,
+  "epochs_phase2": 0,
+  "history": [
+    {
+      "phase": "head",
+      "epoch": 1,
+      "train_loss": 2.05056,
+      "train_acc": 0.4249,
+      "valid_loss": 2.47364,
+      "valid_acc": 0.31184
+    }
+  ]
+}

@@ -1,106 +1,105 @@
 import logging
 import os
-from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+import base64
+from typing import Dict, Any
 
 import httpx
 
+from app.core.config import settings
+from app.ml.ml_classify import classify
 from app.models.schemas import TriageScore, ScanStatus
-from app.services.groq_service import analyze_image_with_groq
 from app.services.image_service import image_service
 
 logger = logging.getLogger(__name__)
 
-
-# Internal route mounted in main.py with prefix settings.API_V1_STR (/api/v1)
-ML_CLASSIFY_URL = "http://localhost:8000/api/v1/ml/classify"
-
-
-@dataclass
-class MLClassifierResult:
-    top_prediction: str
-    confidence: float
-    animal_type: str
-    disease: str
-    is_certain: bool
-    top5: List[Dict[str, Any]] = field(default_factory=list)
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
-async def run_local_classifier(image_path: str) -> Optional[MLClassifierResult]:
-    """Call local EfficientNet endpoint and return parsed result, or None on failure."""
-    try:
-        with open(image_path, "rb") as img_file:
-            payload = img_file.read()
+async def _groq_explain(image_bytes: bytes, ml: Dict[str, Any]) -> str:
+    key = settings.groq_api_key or os.getenv("GROQ_API_KEY", "")
+    if not key:
+        return "GROQ_API_KEY not set in .env"
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                ML_CLASSIFY_URL,
-                files={"file": ("image.jpg", payload, "image/jpeg")},
-            )
+    top = ml.get("top_prediction", {"label": "unknown", "confidence": 0.0})
+    top3 = ml.get("top_3", [])
+    top3_text = ", ".join(
+        f"{r.get('label', 'unknown')} {float(r.get('confidence', 0.0)):.0%}"
+        for r in top3
+    )
 
-        if response.status_code != 200:
-            logger.warning(
-                "ML classifier returned %s: %s",
-                response.status_code,
-                response.text[:200],
-            )
-            return None
-
-        data = response.json()
-        return MLClassifierResult(
-            top_prediction=data.get("top_prediction", "unknown"),
-            confidence=float(data.get("confidence", 0.0)),
-            animal_type=data.get("animal_type", "unknown"),
-            disease=data.get("disease", "unknown"),
-            is_certain=bool(data.get("is_certain", False)),
-            top5=data.get("top5", []),
-        )
-    except httpx.ConnectError:
-        logger.warning("ML classifier unavailable at %s. Falling back to Groq-only mode.", ML_CLASSIFY_URL)
-        return None
-    except Exception as exc:
-        logger.error("Unexpected error calling local classifier: %s", exc)
-        return None
-
-
-def _confidence_label(conf: float) -> str:
-    if conf >= 0.80:
-        return "high"
-    if conf >= 0.50:
-        return "medium"
-    return "low"
-
-
-def _build_hybrid_response(
-    groq_result: Dict[str, Any],
-    ml_result: Optional[MLClassifierResult],
-) -> Dict[str, Any]:
-    """Return a merged response while preserving frontend compatibility fields."""
-    out = dict(groq_result)
-
-    out["ml"] = {
-        "available": ml_result is not None,
-        "top_prediction": ml_result.top_prediction if ml_result else "unavailable",
-        "confidence": ml_result.confidence if ml_result else 0.0,
-        "animal_type": ml_result.animal_type if ml_result else "unknown",
-        "disease": ml_result.disease if ml_result else "unknown",
-        "is_certain": ml_result.is_certain if ml_result else False,
-        "top5": ml_result.top5 if ml_result else [],
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    payload = {
+        "model": GROQ_MODEL,
+        "max_tokens": 400,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a veterinary disease specialist AI. "
+                    "An ML classifier analyzed the image. "
+                    "Validate its prediction visually, describe visible symptoms, "
+                    "and recommend action. Be concise (4-5 sentences)."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"ML prediction: {top.get('label', 'unknown')} "
+                            f"(confidence: {float(top.get('confidence', 0.0)):.0%})\\n"
+                            f"Top-3: {top3_text}\\n\\n"
+                            "Analyze the image and provide your clinical assessment."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                    },
+                ],
+            },
+        ],
     }
 
-    # Existing frontend expects these keys
-    out.setdefault("disease", "Analysis unavailable")
-    out.setdefault("confidence", 0.0)
-    out.setdefault("severity", "unknown")
-    out.setdefault("visual_indicators", [])
-    out.setdefault("recommendation", "Please consult a veterinarian for proper diagnosis.")
-    out.setdefault("requires_vet", True)
-    out.setdefault("source", "groq_vlm")
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                GROQ_URL,
+                json=payload,
+                headers={"Authorization": f"Bearer {key}"},
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"].strip()
+    except httpx.HTTPStatusError as exc:
+        return f"Groq error {exc.response.status_code}: {exc.response.text[:300]}"
+    except Exception as exc:
+        return f"Groq failed: {exc}"
 
-    # Additional hybrid metadata for future UI
-    out["final_diagnosis"] = out.get("disease", "Analysis unavailable")
-    out["confidence_label"] = _confidence_label(float(out.get("confidence", 0.0)))
-    return out
+
+def _extract_animal_and_disease(label: str) -> tuple[str, str]:
+    parts = label.split("_", 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return "unknown", label
+
+
+async def analyze(image_bytes: bytes) -> Dict[str, Any]:
+    try:
+        ml = classify(image_bytes)
+    except Exception as exc:
+        ml = {
+            "top_prediction": {"label": "unknown", "confidence": 0.0},
+            "top_3": [],
+            "is_confident": False,
+            "inference_ms": 0,
+            "error": str(exc),
+        }
+
+    explanation = await _groq_explain(image_bytes, ml)
+    return {"ml": ml, "explanation": explanation}
 
 
 async def run_disease_analysis(image_path: str, animal_type: str) -> dict:
@@ -109,16 +108,27 @@ async def run_disease_analysis(image_path: str, animal_type: str) -> dict:
     processed_path = image_service.preprocess_image(image_path)
     logger.info("Image preprocessed to %s", processed_path)
 
-    ml_result = await run_local_classifier(str(processed_path))
-    if ml_result:
-        logger.info(
-            "Local classifier | top=%s | conf=%.3f",
-            ml_result.top_prediction,
-            ml_result.confidence,
-        )
+    with open(str(processed_path), "rb") as f:
+        image_bytes = f.read()
 
-    result = await analyze_image_with_groq(str(processed_path), animal_type)
-    result = _build_hybrid_response(result, ml_result)
+    hybrid = await analyze(image_bytes)
+    top_pred = hybrid["ml"].get("top_prediction", {"label": "unknown", "confidence": 0.0})
+    label = str(top_pred.get("label", "unknown"))
+    confidence = float(top_pred.get("confidence", 0.0))
+    inferred_animal, disease = _extract_animal_and_disease(label)
+
+    result = {
+        "disease": disease,
+        "confidence": confidence,
+        "severity": "unknown",
+        "visual_indicators": [],
+        "recommendation": hybrid["explanation"],
+        "requires_vet": confidence < 0.6,
+        "source": "groq_vlm",
+        "ml": hybrid["ml"],
+        "explanation": hybrid["explanation"],
+        "animal_type": inferred_animal if inferred_animal != "unknown" else animal_type,
+    }
 
     logger.info(
         "Analysis complete | disease=%s | confidence=%s",
