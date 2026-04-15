@@ -50,6 +50,11 @@ class RedisService:
                 alerts.append(alert)
         return alerts
 
+    def get_alerts_for_farm(self, farm_id: str, limit: int = 100) -> List[dict]:
+        alerts = self.get_all_alerts(limit=limit * 3)
+        filtered = [a for a in alerts if str(a.get("farm_id", "")) == str(farm_id)]
+        return filtered[:limit]
+
     # Detection/VLM methods
     def set_detection(self, case_id: str, detection_data: dict, expire: int = 86400):
         self.client.setex(f"detection:{case_id}", expire, json.dumps(detection_data))
@@ -72,7 +77,36 @@ class RedisService:
                 if detection:
                     detections.append(detection)
             return detections
-        return []
+        return self.get_all_detections(limit=limit, status=status)
+
+    def get_all_detections(
+        self,
+        limit: int = 100,
+        status: Optional[str] = None,
+        farm_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> List[dict]:
+        detections: List[dict] = []
+        for key in self.client.scan_iter(match="detection:*"):
+            raw = self.client.get(key)
+            if not raw:
+                continue
+            try:
+                item = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            if status and str(item.get("status", "")) != str(status):
+                continue
+            if farm_id and str(item.get("farm_id", "")) != str(farm_id):
+                continue
+            if user_id and str(item.get("user_id", "")) != str(user_id):
+                continue
+
+            detections.append(item)
+
+        detections.sort(key=lambda x: str(x.get("updated_at", x.get("created_at", ""))), reverse=True)
+        return detections[:limit]
 
     # Annotation methods
     def set_annotation(self, case_id: str, annotation_data: dict, expire: int = 86400):

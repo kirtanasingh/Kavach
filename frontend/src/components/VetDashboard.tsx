@@ -26,6 +26,30 @@ import {
   Edit
 } from 'lucide-react';
 import logoImg from 'figma:asset/28cc7f8b67ba61bb13e03c30f73fd05e9d3d8a2c.png';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Legend,
+} from 'recharts';
+import {
+  fetchVetAnalytics,
+  fetchVetCases,
+  fetchVetDetectionQueue,
+  submitVetDetectionReview,
+  type AnalyticsPayload,
+  type VetCaseItem,
+  type VetDetectionItem,
+} from '../services/detectionRecordsService';
 
 interface VetDashboardProps {
   onNavigate: (screen: string) => void;
@@ -46,7 +70,14 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
   const [contentFade, setContentFade] = useState(true);
   const [bellShake, setBellShake] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [vlmQueue, setVlmQueue] = useState<any[]>([]);
+  const [vlmQueue, setVlmQueue] = useState<VetDetectionItem[]>([]);
+  const [cases, setCases] = useState<VetCaseItem[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsPayload>({
+    overall_reviews: [],
+    by_species: [],
+    trend: [],
+  });
+  const [loadingData, setLoadingData] = useState(false);
   
   // Count-up animation for metrics
   const [animatedStats, setAnimatedStats] = useState({
@@ -56,52 +87,36 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
     farmsUnderCare: 0
   });
 
-  // Mock stats data
-  const stats = {
-    activeCases: 23,
-    pendingReviews: 8,
-    appointmentsToday: 6,
-    farmsUnderCare: 47
+  const loadVetData = async () => {
+    setLoadingData(true);
+    try {
+      const [queueRows, caseRows, analyticsRows] = await Promise.all([
+        fetchVetDetectionQueue('pending_review'),
+        fetchVetCases(),
+        fetchVetAnalytics(),
+      ]);
+      setVlmQueue(queueRows);
+      setCases(caseRows);
+      setAnalytics(analyticsRows);
+    } catch {
+      setVlmQueue([]);
+      setCases([]);
+      setAnalytics({ overall_reviews: [], by_species: [], trend: [] });
+    } finally {
+      setLoadingData(false);
+    }
   };
 
-  // Fetch VLM Queue from backend
   useEffect(() => {
-    const token = localStorage.getItem('token') || '';
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const API_URL = `${API_BASE}/api/v1`;
-    
-    fetch(`${API_URL}/detections?status=pending_review`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        // Map backend detection format to UI format
-        const mappedData = data.map((item: any) => ({
-          id: item.case_id,
-          farm: item.metadata?.farm_name || 'Unknown Farm',
-          farmer: item.metadata?.farmer_name || 'Unknown Farmer',
-          animal: item.metadata?.animal_id || 'Unknown Animal',
-          uploadDate: item.created_at,
-          aiDiagnosis: item.ai_diagnosis,
-          disease: item.ai_diagnosis,
-          confidence: Math.round((item.confidence || 0) * 100),
-          status: 'Pending Review',
-          priority: item.triage_score === 'HIGH' ? 'High' : item.triage_score === 'MEDIUM' ? 'Medium' : 'Low',
-          thumbnail: item.metadata?.species === 'Poultry' ? '🐔' : item.metadata?.species === 'Pig' ? '🐷' : '🐄',
-          species: item.metadata?.species || 'Unknown'
-        }));
-        setVlmQueue(mappedData);
-      })
-      .catch(() => {
-        // Fallback to mock data
-        setVlmQueue([
-          { id: 1, farm: 'Green Valley Poultry', farmer: 'Rajesh Patel', animal: 'Chicken #1923', uploadDate: '4 Apr 2026 10:15 AM', aiDiagnosis: 'Newcastle Disease', disease: 'Newcastle Disease', confidence: 92, status: 'Pending Review', priority: 'High', thumbnail: '🐔', species: 'Poultry' },
-          { id: 2, farm: 'Sunrise Pig Farm', farmer: 'Priya Sharma', animal: 'Pig #2847', uploadDate: '4 Apr 2026 9:30 AM', aiDiagnosis: 'Swine Flu', disease: 'Swine Flu', confidence: 87, status: 'Pending Review', priority: 'High', thumbnail: '🐷', species: 'Pig' },
-          { id: 3, farm: 'Happy Hens Farm', farmer: 'Amit Kumar', animal: 'Chicken #3452', uploadDate: '3 Apr 2026 4:20 PM', aiDiagnosis: 'Avian Influenza', disease: 'Avian Influenza', confidence: 78, status: 'Under Review', priority: 'Critical', thumbnail: '🐔', species: 'Poultry' },
-          { id: 4, farm: 'Silver Oak Farms', farmer: 'Sunita Desai', animal: 'Pig #2718', uploadDate: '3 Apr 2026 2:10 PM', aiDiagnosis: 'Skin Lesions', disease: 'Skin Lesions', confidence: 65, status: 'Pending Review', priority: 'Medium', thumbnail: '🐷', species: 'Pig' },
-        ]);
-      });
+    loadVetData();
   }, []);
+
+  const stats = {
+    activeCases: cases.filter((item) => item.status !== 'closed').length,
+    pendingReviews: vlmQueue.length,
+    appointmentsToday: 6,
+    farmsUnderCare: new Set(cases.map((c) => c.farmer_name || 'Unknown')).size,
+  };
 
   // Count-up animation effect
   useEffect(() => {
@@ -150,13 +165,7 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
     { id: 3, farm: 'Happy Hens Farm', disease: 'Avian Influenza', severity: 'Critical', time: '1 day ago', location: 'Nashik', status: 'Monitoring' },
   ];
 
-  // Active cases data
-  const activeCases: any[] = [
-    { id: 1, farmName: 'Green Valley Poultry', farm: 'Green Valley Poultry', farmerName: 'Rajesh Patel', animal: 'Chicken #1923', condition: 'Newcastle Disease', disease: 'Newcastle Disease', status: 'Critical', lastUpdate: '2 hours ago', opened: '2 Apr 2026', nextVisit: 'Today 3:00 PM' },
-    { id: 2, farmName: 'Sunrise Pig Farm', farm: 'Sunrise Pig Farm', farmerName: 'Priya Sharma', animal: 'Pig #2847', condition: 'Swine Flu Symptoms', disease: 'Swine Flu', status: 'Under Treatment', lastUpdate: '5 hours ago', opened: '1 Apr 2026', nextVisit: 'Tomorrow 10:00 AM' },
-    { id: 3, farmName: 'Happy Hens Farm', farm: 'Happy Hens Farm', farmerName: 'Amit Kumar', animal: 'Chicken #3452', condition: 'Avian Influenza', disease: 'Avian Influenza', status: 'Monitoring', lastUpdate: '1 day ago', opened: '30 Mar 2026', nextVisit: 'Apr 6, 2:00 PM' },
-    { id: 4, farmName: 'Silver Oak Farms', farm: 'Silver Oak Farms', farmerName: 'Sunita Desai', animal: 'Pig #2718', condition: 'Skin Lesions', disease: 'Skin Lesions', status: 'Stable', lastUpdate: '2 days ago', opened: '28 Mar 2026', nextVisit: 'Apr 8, 11:00 AM' },
-  ];
+  const activeCases = cases.filter((item) => item.status !== 'closed');
 
   // Appointments timeline data
   const appointmentsToday: any[] = [
@@ -167,53 +176,23 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
     { id: 5, time: '5:00 PM', farm: 'Blue Sky Poultry', farmer: 'Ravi Mehta', type: 'Consultation', status: 'Pending', location: 'Pune', distance: '4.3 km', duration: '30' },
   ];
 
-  const handleVLMAccept = async (caseId: number) => {
-    const token = localStorage.getItem('token') || '';
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const API_URL = `${API_BASE}/api/v1`;
-    
+  const handleVLMAccept = async (detectionId: number) => {
     try {
-      await fetch(`${API_URL}/annotations/${caseId}`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({ 
-          accepted: true, 
-          vet_diagnosis: null
-        })
-      });
-      // Remove from queue
-      setVlmQueue(prev => prev.filter(item => item.id !== caseId));
-    } catch (err) {
-      alert('Failed to accept annotation. Please try again.');
+      await submitVetDetectionReview(detectionId, 'safe');
+      await loadVetData();
+    } catch {
+      alert('Failed to save safe review. Please try again.');
     }
   };
 
-  const handleVLMCorrect = async (caseId: number) => {
+  const handleVLMCorrect = async (detectionId: number) => {
     const correctedDiagnosis = prompt('Enter corrected diagnosis:');
     if (!correctedDiagnosis) return;
-    
-    const token = localStorage.getItem('token') || '';
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const API_URL = `${API_BASE}/api/v1`;
-    
+
     try {
-      await fetch(`${API_URL}/annotations/${caseId}`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({ 
-          accepted: false, 
-          vet_diagnosis: correctedDiagnosis
-        })
-      });
-      // Remove from queue
-      setVlmQueue(prev => prev.filter(item => item.id !== caseId));
-    } catch (err) {
+      await submitVetDetectionReview(detectionId, 'not_safe', correctedDiagnosis);
+      await loadVetData();
+    } catch {
       alert('Failed to submit correction. Please try again.');
     }
   };
@@ -403,10 +382,10 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
                 <TableBody>
                   {activeCases.map((caseItem) => (
                     <TableRow key={caseItem.id} className="hover:bg-[#F7F5F0]">
-                      <TableCell className="font-medium text-gray-900">{caseItem.farm}</TableCell>
-                      <TableCell className="text-[#7A7A6E]">{caseItem.disease}</TableCell>
-                      <TableCell className="text-[#7A7A6E]">{caseItem.opened}</TableCell>
-                      <TableCell className="text-[#7A7A6E]">{caseItem.lastUpdate}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{caseItem.farmer_name || 'Unknown Farm'}</TableCell>
+                      <TableCell className="text-[#7A7A6E]">{caseItem.predicted_label}</TableCell>
+                      <TableCell className="text-[#7A7A6E]">{new Date(caseItem.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-[#7A7A6E]">{new Date(caseItem.updated_at).toLocaleString()}</TableCell>
                       <TableCell>
                         <Badge className={`${getStatusStyle(caseItem.status)} px-2 py-1 text-xs rounded-full`}>
                           {caseItem.status}
@@ -478,45 +457,48 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
+              {loadingData && <p className="text-sm text-[#7A7A6E]">Loading reviews...</p>}
+              {!loadingData && vlmQueue.length === 0 && <p className="text-sm text-[#7A7A6E]">No detections pending review.</p>}
               {vlmQueue.map((item) => (
-                <div key={item.id} className="p-3 bg-[#F7F5F0] rounded-lg hover:shadow-sm transition-shadow">
+                <div key={item.detection_id} className="p-3 bg-[#F7F5F0] rounded-lg hover:shadow-sm transition-shadow">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center text-2xl">
-                      {item.thumbnail}
+                      {item.species === 'poultry' ? '🐔' : item.species === 'pig' ? '🐷' : '🐄'}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{item.farm}</p>
-                      <p className="text-xs text-[#7A7A6E]">{item.species}</p>
+                      <p className="text-sm font-medium text-gray-900">{item.farmer_name || 'Unknown Farmer'}</p>
+                      <p className="text-xs text-[#7A7A6E]">{item.species} • {item.animal_name || 'Unknown animal'}</p>
                     </div>
                   </div>
-                  <p className="text-sm font-medium text-gray-900 mb-2">{item.disease}</p>
+                  <p className="text-sm font-medium text-gray-900 mb-2">{item.predicted_label}</p>
+                  <p className="text-xs text-[#7A7A6E] mb-2">Review: {item.review_status || 'pending'}</p>
                   <div className="mb-3">
                     <div className="flex items-center justify-between text-xs text-[#7A7A6E] mb-1">
                       <span>Confidence</span>
-                      <span>{item.confidence}%</span>
+                      <span>{Math.round((item.confidence || 0) * 100)}%</span>
                     </div>
                     <div className="w-full h-1.5 bg-[#E5E3DC] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-[#1B5E42] rounded-full"
-                        style={{ width: `${item.confidence}%` }}
+                        style={{ width: `${Math.round((item.confidence || 0) * 100)}%` }}
                       ></div>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <Button 
                       size="sm" 
-                      onClick={() => handleVLMAccept(item.id)}
+                      onClick={() => handleVLMAccept(item.detection_id)}
                       className="flex-1 bg-[#4CAF7D] hover:bg-[#3D9B68] text-white text-xs"
                     >
-                      Accept
+                      Mark Safe
                     </Button>
                     <Button 
                       size="sm" 
-                      onClick={() => handleVLMCorrect(item.id)}
+                      onClick={() => handleVLMCorrect(item.detection_id)}
                       variant="outline" 
                       className="flex-1 border-[#C0392B] text-[#C0392B] hover:bg-[#C0392B] hover:text-white text-xs"
                     >
-                      Correct
+                      Not Safe
                     </Button>
                   </div>
                 </div>
@@ -590,6 +572,216 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
     </div>
   );
 
+  const renderVlmReview = () => (
+    <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
+      <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
+        <CardTitle className="flex items-center gap-2 text-gray-900">
+          <Activity className="w-5 h-5 text-[#1B5E42]" />
+          VLM Review
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-[#F7F5F0]">
+              <TableHead>Detection</TableHead>
+              <TableHead>Species</TableHead>
+              <TableHead>Confidence</TableHead>
+              <TableHead>Review Status</TableHead>
+              <TableHead>Case Status</TableHead>
+              <TableHead>Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {vlmQueue.map((item) => (
+              <TableRow key={item.detection_id}>
+                <TableCell className="font-medium">{item.predicted_label}</TableCell>
+                <TableCell>{item.species}</TableCell>
+                <TableCell>{Math.round((item.confidence || 0) * 100)}%</TableCell>
+                <TableCell>{item.review_status || 'pending'}</TableCell>
+                <TableCell>{item.case_status || 'open'}</TableCell>
+                <TableCell>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => handleVLMAccept(item.detection_id)} className="bg-[#4CAF7D] hover:bg-[#3D9B68] text-white">
+                      Safe
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleVLMCorrect(item.detection_id)} className="border-[#C0392B] text-[#C0392B]">
+                      Not Safe
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {!loadingData && vlmQueue.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-[#7A7A6E] py-8">
+                  No pending detections for review.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+
+  const renderCases = () => (
+    <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
+      <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
+        <CardTitle className="flex items-center gap-2 text-gray-900">
+          <FileText className="w-5 h-5 text-[#1B5E42]" />
+          Cases
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-[#F7F5F0]">
+              <TableHead>Case ID</TableHead>
+              <TableHead>Disease</TableHead>
+              <TableHead>Species</TableHead>
+              <TableHead>Review</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Updated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {cases.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell className="font-medium">#{item.id}</TableCell>
+                <TableCell>{item.predicted_label}</TableCell>
+                <TableCell>{item.species}</TableCell>
+                <TableCell>{item.review_status || 'pending'}</TableCell>
+                <TableCell>{item.status}</TableCell>
+                <TableCell>{new Date(item.updated_at).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+            {!loadingData && cases.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-[#7A7A6E] py-8">
+                  No cases available.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+
+  const renderAnalytics = () => {
+    const safeCount = cases.filter((c) => (c.review_status || '').toLowerCase() === 'safe').length;
+    const notSafeCount = cases.filter((c) => (c.review_status || '').toLowerCase() === 'not_safe').length;
+    const diseaseCount = cases.filter((c) => !((c.predicted_label || '').toLowerCase().includes('healthy'))).length;
+    const noDiseaseCount = cases.filter((c) => (c.predicted_label || '').toLowerCase().includes('healthy')).length;
+    const totalCases = Math.max(cases.length, 1);
+
+    const pct = (count: number) => Math.round((count / totalCases) * 1000) / 10;
+
+    const overallCategoryData = [
+      { category: 'Healthy', percentage: pct(safeCount) },
+      { category: 'Unhealthy', percentage: pct(notSafeCount) },
+      { category: 'Disease', percentage: pct(diseaseCount) },
+      { category: 'No Disease', percentage: pct(noDiseaseCount) },
+    ];
+
+    const buildSpeciesPercentages = (species: string) => {
+      const rows = cases.filter((c) => (c.species || '').toLowerCase() === species.toLowerCase());
+      const total = Math.max(rows.length, 1);
+      const safe = rows.filter((r) => (r.review_status || '').toLowerCase() === 'safe').length;
+      const notSafe = rows.filter((r) => (r.review_status || '').toLowerCase() === 'not_safe').length;
+      const disease = rows.filter((r) => !((r.predicted_label || '').toLowerCase().includes('healthy'))).length;
+      const noDisease = rows.filter((r) => (r.predicted_label || '').toLowerCase().includes('healthy')).length;
+      return [
+        { category: 'Healthy', percentage: Math.round((safe / total) * 1000) / 10 },
+        { category: 'Unhealthy', percentage: Math.round((notSafe / total) * 1000) / 10 },
+        { category: 'Disease', percentage: Math.round((disease / total) * 1000) / 10 },
+        { category: 'No Disease', percentage: Math.round((noDisease / total) * 1000) / 10 },
+      ];
+    };
+
+    const pigData = buildSpeciesPercentages('pig');
+    const cattleData = buildSpeciesPercentages('cattle');
+    const poultryData = buildSpeciesPercentages('poultry');
+
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-[#7A7A6E]">
+          X-axis: health category. Y-axis: percentage of detections in that category.
+        </p>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
+            <CardHeader>
+              <CardTitle className="text-gray-900">Overall Animals</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={overallCategoryData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
+                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip />
+                  <Bar dataKey="percentage" fill="#1B5E42" name="Percentage" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
+            <CardHeader>
+              <CardTitle className="text-gray-900">Pig-specific Data</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={pigData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
+                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip />
+                  <Bar dataKey="percentage" fill="#4CAF7D" name="Percentage" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
+            <CardHeader>
+              <CardTitle className="text-gray-900">Cattle-specific Data</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={cattleData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
+                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip />
+                  <Bar dataKey="percentage" fill="#E8A838" name="Percentage" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
+            <CardHeader>
+              <CardTitle className="text-gray-900">Poultry-specific Data</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={poultryData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
+                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip />
+                  <Bar dataKey="percentage" fill="#C0392B" name="Percentage" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeNav) {
       case 'dashboard':
@@ -599,15 +791,15 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
       case 'appointments':
         return <div className="text-gray-900">Appointments content coming soon...</div>;
       case 'cases':
-        return <div className="text-gray-900">Cases content coming soon...</div>;
+        return renderCases();
       case 'vlm-review':
-        return <div className="text-gray-900">VLM Review content coming soon...</div>;
+        return renderVlmReview();
       case 'prescriptions':
         return <div className="text-gray-900">Prescriptions content coming soon...</div>;
       case 'farmers':
         return <div className="text-gray-900">Farmers content coming soon...</div>;
       case 'analytics':
-        return <div className="text-gray-900">Analytics content coming soon...</div>;
+        return renderAnalytics();
       default:
         return renderDashboard();
     }

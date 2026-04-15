@@ -12,6 +12,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+GROQ_TIMEOUT_SECONDS = float(os.getenv("GROQ_TIMEOUT_SECONDS", "8"))
+
 GROQ_VISION_MODELS = [
     os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct"),
     "llama-3.2-11b-vision-preview",
@@ -148,7 +150,6 @@ def _build_validation_prompt(expected_animal_type: str) -> str:
 Expected animal category: {expected_animal_type}.
 
 Decide whether this image is a real animal photo and whether it matches the expected category.
-- Accepted categories: pig, poultry
 - Accepted categories: pig, poultry, cattle
 - Reject objects, people, scenery, text screenshots, logos, and non-animal images.
 
@@ -222,7 +223,10 @@ async def analyze_image_with_groq(image_path: str, animal_type: str) -> dict:
                     )
                     return response.choices[0].message.content or ""
 
-                raw_text = await asyncio.to_thread(_call_groq)
+                raw_text = await asyncio.wait_for(
+                    asyncio.to_thread(_call_groq),
+                    timeout=GROQ_TIMEOUT_SECONDS,
+                )
                 break
             except Exception as model_error:
                 last_error = model_error
@@ -291,7 +295,10 @@ async def validate_animal_image(image_path: str, expected_animal_type: str) -> t
                 )
                 return response.choices[0].message.content or ""
 
-            raw_text = await asyncio.to_thread(_call_groq)
+            raw_text = await asyncio.wait_for(
+                asyncio.to_thread(_call_groq),
+                timeout=GROQ_TIMEOUT_SECONDS,
+            )
             break
         except Exception as model_error:
             last_error = model_error
@@ -309,7 +316,7 @@ async def validate_animal_image(image_path: str, expected_animal_type: str) -> t
         parsed = json.loads(cleaned)
     except Exception:
         logger.error("Validation response parse failed: %s", raw_text)
-        return False, "Could not validate image type. Please upload a clear pig or poultry photo."
+        return False, "Could not validate image type. Please upload a clear pig, poultry, or cattle photo."
 
     is_animal = bool(parsed.get("is_animal", False))
     is_expected = bool(parsed.get("is_expected_type", False))

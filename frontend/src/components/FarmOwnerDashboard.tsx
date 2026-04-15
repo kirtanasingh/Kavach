@@ -44,8 +44,12 @@ import {
 } from 'lucide-react';
 import logoImg from 'figma:asset/28cc7f8b67ba61bb13e03c30f73fd05e9d3d8a2c.png';
 import { analyzeImage } from '../services/diseaseDetectionService';
-
-const DETECTION_HISTORY_STORAGE_KEY = 'farmOwnerDetectionHistory';
+import {
+  clearFarmerDetectionHistory,
+  deleteFarmerDetection,
+  fetchFarmerDetectionHistory,
+  type DetectionRecord,
+} from '../services/detectionRecordsService';
 
 type DetectionSeverity = 'High' | 'Medium' | 'Low' | 'Unknown';
 type DetectionAnimalType = 'pig' | 'poultry' | 'cattle';
@@ -79,16 +83,39 @@ const mapSeverityToLabel = (severity?: string): DetectionSeverity => {
   }
 };
 
-const loadDetectionHistory = (): DetectionHistoryItem[] => {
-  try {
-    const raw = localStorage.getItem(DETECTION_HISTORY_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+const formatReviewStatus = (value?: string): string => {
+  const normalized = (value || '').toLowerCase();
+  if (normalized === 'safe') return 'Safe';
+  if (normalized === 'not_safe') return 'Not Safe';
+  if (normalized === 'other') return 'Other';
+  if (normalized === 'pending') return 'Pending';
+  if (normalized === 'completed') return 'Completed';
+  return value || 'Pending';
 };
+
+
+const mapHistoryRecord = (record: DetectionRecord): DetectionHistoryItem => ({
+  id: String(record.id),
+  disease: record.predicted_label || 'Unknown',
+  confidence: Math.round((record.confidence ?? 0) * 100),
+  severity: mapSeverityToLabel(record.severity),
+  animalType: (record.species || 'pig') as DetectionAnimalType,
+  status: formatReviewStatus(record.review_status || record.status),
+  recommendation: record.recommendation ?? '',
+  image:
+    (record.species || '').toLowerCase() === 'pig'
+      ? '🐷'
+      : (record.species || '').toLowerCase() === 'poultry'
+      ? '🐔'
+      : '🐄',
+  date: new Date(record.created_at).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+});
 
 interface FarmOwnerDashboardProps {
   initialNav?: 'home' | 'detection' | 'tasks' | 'records' | 'alerts' | 'compliance' | 'reports';
@@ -114,7 +141,7 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
   const [loading, setLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [detectionHistory, setDetectionHistory] = useState<DetectionHistoryItem[]>(() => loadDetectionHistory());
+  const [detectionHistory, setDetectionHistory] = useState<DetectionHistoryItem[]>([]);
   const [historyAnimalFilter, setHistoryAnimalFilter] = useState<'all' | 'pig' | 'poultry' | 'cattle'>('all');
   const [historySeverityFilter, setHistorySeverityFilter] = useState<'all' | 'High' | 'Medium' | 'Low' | 'Unknown'>('all');
 
@@ -131,8 +158,19 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
   }, [previewUrl]);
 
   useEffect(() => {
-    localStorage.setItem(DETECTION_HISTORY_STORAGE_KEY, JSON.stringify(detectionHistory));
-  }, [detectionHistory]);
+    fetchFarmerDetectionHistory()
+      .then((rows) => setDetectionHistory(rows.map(mapHistoryRecord)))
+      .catch(() => setDetectionHistory([]));
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchFarmerDetectionHistory()
+        .then((rows) => setDetectionHistory(rows.map(mapHistoryRecord)))
+        .catch(() => undefined);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Mock Data
   const stats = {
@@ -294,25 +332,8 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
       console.log('API RESPONSE RECEIVED', result);
       setAnalysisResult(result);
 
-      const historyItem: DetectionHistoryItem = {
-        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        disease: result.disease || 'Unknown',
-        confidence: Math.round((result.confidence ?? 0) * 100),
-        severity: mapSeverityToLabel(result.severity),
-        animalType: animalType.toLowerCase() as DetectionAnimalType,
-        status: result.requires_vet ? 'Pending' : 'Completed',
-        recommendation: result.recommendation ?? '',
-        image: animalType === 'Pig' ? '🐷' : animalType === 'Poultry' ? '🐔' : '🐄',
-        date: new Date().toLocaleString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-      };
-
-      setDetectionHistory((prev) => [historyItem, ...prev]);
+      const rows = await fetchFarmerDetectionHistory();
+      setDetectionHistory(rows.map(mapHistoryRecord));
     } catch (err: any) {
       console.error(err);
       setAnalysisError(err?.message ?? 'Analysis failed. Please try again.');
@@ -350,12 +371,22 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
     setLoading(false);
   };
 
-  const handleDeleteHistoryItem = (id: string) => {
-    setDetectionHistory((prev) => prev.filter((item) => item.id !== id));
+  const handleDeleteHistoryItem = async (id: string) => {
+    try {
+      await deleteFarmerDetection(id);
+      setDetectionHistory((prev) => prev.filter((item) => item.id !== id));
+    } catch {
+      setAnalysisError('Failed to delete detection record.');
+    }
   };
 
-  const handleClearHistory = () => {
-    setDetectionHistory([]);
+  const handleClearHistory = async () => {
+    try {
+      await clearFarmerDetectionHistory();
+      setDetectionHistory([]);
+    } catch {
+      setAnalysisError('Failed to clear detection history.');
+    }
   };
 
   const menuItems = [

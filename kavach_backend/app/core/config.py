@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     secret_key: str = ""
     algorithm: str = "HS256"
     redis_url: str = "redis://localhost:6379/0"
+    postgres_dsn: str = "postgresql://postgres@localhost:5432/kavach_db"
+    enable_vlm_validation: bool = False
+    groq_timeout_seconds: float = 8.0
 
     def verify_groq_key(self) -> bool:
         return bool(self.groq_api_key and self.groq_api_key.startswith("gsk_"))
@@ -40,6 +43,18 @@ class Settings(BaseSettings):
     @property
     def REDIS_URL(self) -> str:
         return self.redis_url
+
+    @property
+    def POSTGRES_DSN(self) -> str:
+        return self.postgres_dsn
+
+    @property
+    def ENABLE_VLM_VALIDATION(self) -> bool:
+        return self.enable_vlm_validation
+
+    @property
+    def GROQ_TIMEOUT_SECONDS(self) -> float:
+        return self.groq_timeout_seconds
 
     @property
     def SECRET_KEY(self) -> str:

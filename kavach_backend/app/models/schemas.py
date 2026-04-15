@@ -64,7 +64,8 @@ class DetectionItem(BaseModel):
     metadata: Optional[dict] = None
 
 class AnnotationRequest(BaseModel):
-    accepted: bool
+    accepted: Optional[bool] = None
+    review_status: Optional[str] = None
     vet_diagnosis: Optional[str] = None
     notes: Optional[str] = None
 

@@ -1,12 +1,14 @@
 import os
 import shutil
 import uuid
+import asyncio
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 from app.core.config import settings
 from app.services.analysis_service import run_disease_analysis
 from app.services.groq_service import validate_animal_image
+from app.services.postgres_service import postgres_service
 
 router = APIRouter()
 
@@ -30,11 +32,41 @@ async def _analyze_upload(file: UploadFile, animal_type: str) -> dict:
         shutil.copyfileobj(file.file, buffer)
 
     try:
-        is_valid, reason = await validate_animal_image(save_path, normalized_animal_type)
+        is_valid, reason = True, "ok"
+        if settings.ENABLE_VLM_VALIDATION:
+            try:
+                is_valid, reason = await asyncio.wait_for(
+                    validate_animal_image(save_path, normalized_animal_type),
+                    timeout=float(settings.GROQ_TIMEOUT_SECONDS),
+                )
+            except asyncio.TimeoutError:
+                is_valid, reason = False, "Image validation timed out; continued with scan."
+
         result = await run_disease_analysis(save_path, normalized_animal_type)
         if not is_valid:
             # Soft-fail validation to avoid false negatives blocking real farm uploads.
             result["validation_warning"] = reason
+
+        status = "pending" if result.get("requires_vet") else "completed"
+        severity = str(result.get("severity") or "unknown")
+        predicted = str(result.get("disease") or "unknown")
+        recommendation = str(result.get("recommendation") or "")
+        ml_pred = result.get("ml", {}).get("top_prediction", {}).get("label")
+
+        saved = postgres_service.save_detection_record(
+            species=normalized_animal_type,
+            predicted_label=str(ml_pred or predicted),
+            confidence=float(result.get("confidence") or 0.0),
+            severity=severity,
+            status=status,
+            recommendation=recommendation,
+            image_url=None,
+        )
+
+        result["detection_id"] = saved.get("id")
+        result["case_id"] = saved.get("case", {}).get("id")
+        result["review_status"] = "pending"
+        result["created_at"] = saved.get("created_at")
     finally:
         if os.path.exists(save_path):
             os.remove(save_path)

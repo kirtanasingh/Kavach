@@ -1,6 +1,8 @@
 import logging
 import os
 import base64
+import uuid
+from datetime import datetime
 from typing import Dict, Any
 
 import httpx
@@ -9,6 +11,7 @@ from app.core.config import settings
 from app.ml.ml_classify import classify
 from app.models.schemas import TriageScore, ScanStatus
 from app.services.image_service import image_service
+from app.services.redis_service import redis_service
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +68,7 @@ async def _groq_explain(image_bytes: bytes, ml: Dict[str, Any]) -> str:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=float(settings.GROQ_TIMEOUT_SECONDS)) as client:
             response = await client.post(
                 GROQ_URL,
                 json=payload,
@@ -129,6 +132,31 @@ async def run_disease_analysis(image_path: str, animal_type: str) -> dict:
         "explanation": hybrid["explanation"],
         "animal_type": inferred_animal if inferred_animal != "unknown" else animal_type,
     }
+
+    # Persist a lightweight detection history record for dashboard endpoints.
+    try:
+        case_id = str(uuid.uuid4())
+        status = ScanStatus.COMPLETED if confidence >= 0.6 else ScanStatus.MANUAL_REVIEW
+        detection = {
+            "case_id": case_id,
+            "farm_id": "test_farm",
+            "user_id": "test_user",
+            "status": status,
+            "ai_diagnosis": result.get("disease"),
+            "triage_score": TriageScore.HIGH if confidence >= 0.85 else TriageScore.MEDIUM,
+            "confidence": confidence,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            "metadata": {
+                "animal_type": result.get("animal_type", animal_type),
+                "source": result.get("source", "unknown"),
+            },
+        }
+        redis_service.set_detection(case_id, detection, expire=2592000)
+        result["case_id"] = case_id
+        result["status"] = str(status)
+    except Exception as exc:
+        logger.warning("Unable to save detection history: %s", exc)
 
     logger.info(
         "Analysis complete | disease=%s | confidence=%s",

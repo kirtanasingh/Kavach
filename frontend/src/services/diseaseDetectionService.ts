@@ -10,6 +10,10 @@ export interface VLMAnalysisResult {
   requires_vet: boolean;
   source: 'groq_vlm' | 'fallback';
   fallback_reason?: string;
+  detection_id?: number;
+  case_id?: number;
+  review_status?: 'pending' | 'safe' | 'not_safe' | 'other';
+  created_at?: string;
 }
 
 /**
