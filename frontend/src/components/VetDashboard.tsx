@@ -179,6 +179,7 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
   const handleVLMAccept = async (detectionId: number) => {
     try {
       await submitVetDetectionReview(detectionId, 'safe');
+      setVlmQueue((prev) => prev.filter((item) => item.detection_id !== detectionId));
       await loadVetData();
     } catch {
       alert('Failed to save safe review. Please try again.');
@@ -191,6 +192,7 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
 
     try {
       await submitVetDetectionReview(detectionId, 'not_safe', correctedDiagnosis);
+      setVlmQueue((prev) => prev.filter((item) => item.detection_id !== detectionId));
       await loadVetData();
     } catch {
       alert('Failed to submit correction. Please try again.');
@@ -260,9 +262,9 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
   };
 
   const renderDashboard = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-x-hidden">
       {/* Metric Cards Row */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-6">
         <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -321,9 +323,9 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
       </div>
 
       {/* Two Column Layout */}
-      <div className="grid grid-cols-[65%_35%] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Left Column - 65% */}
-        <div className="space-y-6">
+        <div className="space-y-6 xl:col-span-2">
           {/* Critical Alerts */}
           <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
             <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
@@ -367,8 +369,8 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
                 Active Cases
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <Table>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table className="min-w-[760px]">
                 <TableHeader>
                   <TableRow className="bg-[#F7F5F0]">
                     <TableHead className="text-[#7A7A6E]">Farm</TableHead>
@@ -442,7 +444,7 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
         </div>
 
         {/* Right Column - 35% */}
-        <div className="space-y-6">
+        <div className="space-y-6 xl:col-span-1">
           {/* VLM Review Queue */}
           <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
             <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
@@ -580,8 +582,8 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
           VLM Review
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <Table>
+      <CardContent className="p-0 overflow-x-auto">
+        <Table className="min-w-[720px]">
           <TableHeader>
             <TableRow className="bg-[#F7F5F0]">
               <TableHead>Detection</TableHead>
@@ -633,8 +635,8 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
           Cases
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <Table>
+      <CardContent className="p-0 overflow-x-auto">
+        <Table className="min-w-[720px]">
           <TableHeader>
             <TableRow className="bg-[#F7F5F0]">
               <TableHead>Case ID</TableHead>
@@ -670,109 +672,138 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
   );
 
   const renderAnalytics = () => {
-    const safeCount = cases.filter((c) => (c.review_status || '').toLowerCase() === 'safe').length;
-    const notSafeCount = cases.filter((c) => (c.review_status || '').toLowerCase() === 'not_safe').length;
-    const diseaseCount = cases.filter((c) => !((c.predicted_label || '').toLowerCase().includes('healthy'))).length;
-    const noDiseaseCount = cases.filter((c) => (c.predicted_label || '').toLowerCase().includes('healthy')).length;
+    const normalize = (value: string | null | undefined) => (value || '').toLowerCase();
     const totalCases = Math.max(cases.length, 1);
 
-    const pct = (count: number) => Math.round((count / totalCases) * 1000) / 10;
-
-    const overallCategoryData = [
-      { category: 'Healthy', percentage: pct(safeCount) },
-      { category: 'Unhealthy', percentage: pct(notSafeCount) },
-      { category: 'Disease', percentage: pct(diseaseCount) },
-      { category: 'No Disease', percentage: pct(noDiseaseCount) },
-    ];
-
-    const buildSpeciesPercentages = (species: string) => {
-      const rows = cases.filter((c) => (c.species || '').toLowerCase() === species.toLowerCase());
-      const total = Math.max(rows.length, 1);
-      const safe = rows.filter((r) => (r.review_status || '').toLowerCase() === 'safe').length;
-      const notSafe = rows.filter((r) => (r.review_status || '').toLowerCase() === 'not_safe').length;
-      const disease = rows.filter((r) => !((r.predicted_label || '').toLowerCase().includes('healthy'))).length;
-      const noDisease = rows.filter((r) => (r.predicted_label || '').toLowerCase().includes('healthy')).length;
-      return [
-        { category: 'Healthy', percentage: Math.round((safe / total) * 1000) / 10 },
-        { category: 'Unhealthy', percentage: Math.round((notSafe / total) * 1000) / 10 },
-        { category: 'Disease', percentage: Math.round((disease / total) * 1000) / 10 },
-        { category: 'No Disease', percentage: Math.round((noDisease / total) * 1000) / 10 },
-      ];
+    const isHealthyCase = (item: VetCaseItem) => {
+      const review = normalize(item.review_status);
+      const label = normalize(item.predicted_label);
+      if (review === 'safe') {
+        return true;
+      }
+      if (review === 'not_safe') {
+        return false;
+      }
+      return label.includes('healthy');
     };
 
-    const pigData = buildSpeciesPercentages('pig');
-    const cattleData = buildSpeciesPercentages('cattle');
-    const poultryData = buildSpeciesPercentages('poultry');
+    const severityLevel = (item: VetCaseItem): 'Mild' | 'Moderate' | 'Severe' => {
+      if (isHealthyCase(item)) {
+        return 'Mild';
+      }
+
+      const confidence = Number(item.confidence || 0);
+      const label = normalize(item.predicted_label);
+      const highRiskPattern = /(foot_and_mouth|swinepox|lumpy|influenza|newcastle)/;
+
+      if (confidence >= 0.85 || highRiskPattern.test(label)) {
+        return 'Severe';
+      }
+      if (confidence >= 0.6) {
+        return 'Moderate';
+      }
+      return 'Mild';
+    };
+
+    const healthyCount = cases.filter(isHealthyCase).length;
+    const unhealthyCount = Math.max(cases.length - healthyCount, 0);
+
+    const healthStatusData = [
+      { name: 'Healthy', count: healthyCount, percentage: Math.round((healthyCount / totalCases) * 1000) / 10, color: '#4CAF7D' },
+      { name: 'Unhealthy', count: unhealthyCount, percentage: Math.round((unhealthyCount / totalCases) * 1000) / 10, color: '#C0392B' },
+    ];
+
+    const severityBuckets = cases.reduce(
+      (acc, item) => {
+        const severity = severityLevel(item);
+        acc[severity] += 1;
+        return acc;
+      },
+      { Mild: 0, Moderate: 0, Severe: 0 }
+    );
+
+    const severityData = [
+      {
+        category: 'Mild',
+        count: severityBuckets.Mild,
+        percentage: Math.round((severityBuckets.Mild / totalCases) * 1000) / 10,
+        fill: '#4CAF7D',
+      },
+      {
+        category: 'Moderate',
+        count: severityBuckets.Moderate,
+        percentage: Math.round((severityBuckets.Moderate / totalCases) * 1000) / 10,
+        fill: '#E8A838',
+      },
+      {
+        category: 'Severe',
+        count: severityBuckets.Severe,
+        percentage: Math.round((severityBuckets.Severe / totalCases) * 1000) / 10,
+        fill: '#C0392B',
+      },
+    ];
 
     return (
       <div className="space-y-6">
-        <p className="text-sm text-[#7A7A6E]">
-          X-axis: health category. Y-axis: percentage of detections in that category.
-        </p>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
             <CardHeader>
-              <CardTitle className="text-gray-900">Overall Animals</CardTitle>
+              <CardTitle className="text-gray-900">Health Status Overview</CardTitle>
             </CardHeader>
             <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={overallCategoryData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
-                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Bar dataKey="percentage" fill="#1B5E42" name="Percentage" />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={healthStatusData}
+                      dataKey="count"
+                      nameKey="name"
+                      innerRadius={58}
+                      outerRadius={86}
+                      paddingAngle={4}
+                    >
+                      {healthStatusData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number, name: string) => [`${value} cases`, name]} />
+                    <Legend verticalAlign="bottom" height={30} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                {healthStatusData.map((item) => (
+                  <div key={item.name} className="rounded-xl border border-[#E5E3DC] p-3 bg-[#F7F5F0]">
+                    <p className="text-xs text-[#7A7A6E]">{item.name}</p>
+                    <p className="text-lg font-semibold text-gray-900">{item.percentage}%</p>
+                    <p className="text-xs text-[#7A7A6E]">{item.count} cases</p>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
           <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
             <CardHeader>
-              <CardTitle className="text-gray-900">Pig-specific Data</CardTitle>
+              <CardTitle className="text-gray-900">Severity Analysis</CardTitle>
             </CardHeader>
             <CardContent className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={pigData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
-                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Bar dataKey="percentage" fill="#4CAF7D" name="Percentage" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
-            <CardHeader>
-              <CardTitle className="text-gray-900">Cattle-specific Data</CardTitle>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={cattleData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
-                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Bar dataKey="percentage" fill="#E8A838" name="Percentage" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
-            <CardHeader>
-              <CardTitle className="text-gray-900">Poultry-specific Data</CardTitle>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={poultryData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="category" label={{ value: 'Category', position: 'insideBottom', offset: -5 }} />
-                  <YAxis domain={[0, 100]} label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Bar dataKey="percentage" fill="#C0392B" name="Percentage" />
+                <BarChart data={severityData} barCategoryGap={28}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ECEAE3" />
+                  <XAxis dataKey="category" tick={{ fill: '#5F5F53', fontSize: 12 }} />
+                  <YAxis allowDecimals={false} tick={{ fill: '#5F5F53', fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value: number, _name: string, ctx: { payload?: { percentage?: number; category?: string } }) => {
+                      const row = ctx?.payload;
+                      return [`${value} cases (${row?.percentage || 0}%)`, row?.category || 'Severity'];
+                    }}
+                  />
+                  <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                    {severityData.map((entry) => (
+                      <Cell key={entry.category} fill={entry.fill} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -806,15 +837,15 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] flex">
-      {/* Left Sidebar */}
-      <aside className="w-64 bg-white border-r border-[#E5E3DC] flex flex-col">
+    <div className="min-h-screen bg-[#F7F5F0] flex overflow-x-hidden">
+      {/* Fixed Left Sidebar */}
+      <aside className="w-64 bg-white border-r border-[#E5E3DC] flex flex-col fixed h-screen">
         <div className="p-6 border-b border-[#E5E3DC]">
           <img src={logoImg} alt="Kavach Logo" className="h-10" />
           <p className="text-xs text-[#7A7A6E] mt-2">Veterinary Care Portal</p>
         </div>
         
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeNav === item.id;
@@ -847,9 +878,9 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 ml-64 min-w-0 flex flex-col">
         {/* Top Bar */}
-        <header className="bg-white border-b border-[#E5E3DC] px-8 py-5">
+        <header className="bg-white border-b border-[#E5E3DC] px-8 py-5 sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">Veterinarian Portal</h1>
             
@@ -879,7 +910,7 @@ export function VetDashboard({ onNavigate, onLogout, userName, userEmail }: VetD
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-8">
           {renderContent()}
         </div>
       </main>

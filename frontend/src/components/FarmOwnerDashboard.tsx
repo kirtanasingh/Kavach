@@ -62,6 +62,7 @@ interface DetectionHistoryItem {
   animalType: DetectionAnimalType;
   status: string;
   recommendation: string;
+  vetNote?: string;
   image: string;
   date: string;
 }
@@ -102,6 +103,7 @@ const mapHistoryRecord = (record: DetectionRecord): DetectionHistoryItem => ({
   animalType: (record.species || 'pig') as DetectionAnimalType,
   status: formatReviewStatus(record.review_status || record.status),
   recommendation: record.recommendation ?? '',
+  vetNote: record.vet_note ?? undefined,
   image:
     (record.species || '').toLowerCase() === 'pig'
       ? '🐷'
@@ -406,6 +408,54 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
     const severityMatch = historySeverityFilter === 'all' || item.severity === historySeverityFilter;
     return animalTypeMatch && severityMatch;
   });
+
+  const recordsAnimals = detectionHistory.map((item) => ({
+    id: item.id,
+    tag: `D${item.id}`,
+    species: item.animalType.charAt(0).toUpperCase() + item.animalType.slice(1),
+    age: '--',
+    status: item.status,
+    lastCheckup: item.date,
+  }));
+
+  const recordsTreatments = detectionHistory
+    .filter((item) => item.recommendation || item.vetNote)
+    .map((item) => ({
+      id: item.id,
+      animal: `${item.animalType.toUpperCase()} #D${item.id}`,
+      diagnosis: item.disease,
+      vetMessage: item.vetNote || item.recommendation || 'No message',
+      review: item.status,
+      date: item.date,
+      status: item.status,
+    }));
+
+  const reviewedCount = detectionHistory.filter((x) => x.status !== 'Pending').length;
+  const safeCount = detectionHistory.filter((x) => x.status === 'Safe').length;
+  const compliancePct = detectionHistory.length > 0 ? Math.round((safeCount / detectionHistory.length) * 100) : 0;
+  const complianceRows = [
+    {
+      id: '1',
+      item: 'Vet Reviews Completed',
+      status: reviewedCount >= Math.ceil(Math.max(detectionHistory.length, 1) * 0.6) ? 'Compliant' : 'Pending',
+      lastReview: detectionHistory[0]?.date || '--',
+      nextDue: 'Immediate for pending records',
+    },
+    {
+      id: '2',
+      item: 'Healthy Clearance Rate',
+      status: compliancePct >= 60 ? 'Compliant' : 'Needs Attention',
+      lastReview: `${compliancePct}% safe`,
+      nextDue: 'Continuous monitoring',
+    },
+    {
+      id: '3',
+      item: 'Unreviewed Detections',
+      status: detectionHistory.some((x) => x.status === 'Pending') ? 'Pending' : 'Compliant',
+      lastReview: `${detectionHistory.filter((x) => x.status === 'Pending').length} pending`,
+      nextDue: 'Vet action required',
+    },
+  ];
 
   // Render content based on active navigation
   const renderContent = () => {
@@ -939,6 +989,11 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
                         <span className="font-medium text-gray-900">Recommendation:</span> {detection.recommendation}
                       </div>
                     )}
+                    {detection.vetNote && (
+                      <div className="mt-2 p-2 bg-[#FFF6E5] border border-[#E8A838]/30 rounded-lg text-xs text-[#7A7A6E]">
+                        <span className="font-medium text-gray-900">Vet Message:</span> {detection.vetNote}
+                      </div>
+                    )}
                   </div>
                   <Button
                     variant="ghost"
@@ -1085,7 +1140,7 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {animals.map(animal => (
+                {recordsAnimals.map(animal => (
                   <TableRow key={animal.id} className="hover:bg-[#F7F5F0]">
                     <TableCell className="font-medium text-gray-900">{animal.tag}</TableCell>
                     <TableCell className="text-[#7A7A6E]">{animal.species}</TableCell>
@@ -1111,23 +1166,21 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
               <TableHeader>
                 <TableRow className="bg-[#F7F5F0]">
                   <TableHead className="text-[#7A7A6E]">Animal</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Drug</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Dose</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Vet</TableHead>
+                  <TableHead className="text-[#7A7A6E]">Diagnosis</TableHead>
+                  <TableHead className="text-[#7A7A6E]">Vet Message</TableHead>
+                  <TableHead className="text-[#7A7A6E]">Review</TableHead>
                   <TableHead className="text-[#7A7A6E]">Date</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Withdrawal End</TableHead>
                   <TableHead className="text-[#7A7A6E]">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {treatments.map(treatment => (
+                {recordsTreatments.map(treatment => (
                   <TableRow key={treatment.id} className="hover:bg-[#F7F5F0]">
                     <TableCell className="font-medium text-gray-900">{treatment.animal}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{treatment.drug}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{treatment.dose}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{treatment.vet}</TableCell>
+                    <TableCell className="text-[#7A7A6E]">{treatment.diagnosis}</TableCell>
+                    <TableCell className="text-[#7A7A6E] max-w-xs truncate" title={treatment.vetMessage}>{treatment.vetMessage}</TableCell>
+                    <TableCell className="text-[#7A7A6E]">{treatment.review}</TableCell>
                     <TableCell className="text-[#7A7A6E]">{treatment.date}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{treatment.withdrawalEnd}</TableCell>
                     <TableCell>
                       <Badge className={`${getStatusStyle(treatment.status)} px-2 py-1 text-xs rounded-full`}>
                         {treatment.status}
@@ -1152,13 +1205,13 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
                       fill="none"
                       stroke="#1B5E42"
                       strokeWidth="8"
-                      strokeDasharray={`${complianceData.percentage * 2.51} 251`}
+                      strokeDasharray={`${compliancePct * 2.51} 251`}
                       strokeLinecap="round"
                       transform="rotate(-90 50 50)"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-3xl font-bold text-gray-900">{complianceData.percentage}%</span>
+                    <span className="text-3xl font-bold text-gray-900">{compliancePct}%</span>
                     <span className="text-sm text-[#7A7A6E]">Compliant</span>
                   </div>
                 </div>
@@ -1175,7 +1228,7 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {complianceItems.map(item => (
+                  {complianceRows.map(item => (
                     <TableRow key={item.id} className="hover:bg-[#F7F5F0]">
                       <TableCell className="font-medium text-gray-900">{item.item}</TableCell>
                       <TableCell>

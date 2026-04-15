@@ -239,9 +239,9 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
 
   // Dashboard Overview Content
   const renderDashboard = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-x-hidden">
       {/* Metric Cards Row */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-6">
         <Card className="bg-white rounded-2xl border border-[#E5E3DC] kavach-card">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -300,9 +300,9 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
       </div>
 
       {/* Two Column Layout */}
-      <div className="grid grid-cols-[65%_35%] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Left Column - 65% */}
-        <div className="space-y-6">
+        <div className="space-y-6 xl:col-span-2">
           {/* Active Outbreaks Table */}
           <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
             <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
@@ -311,8 +311,8 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
                 Active Outbreaks
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <Table>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table className="min-w-[760px]">
                 <TableHeader>
                   <TableRow className="bg-[#F7F5F0]">
                     <TableHead className="text-[#7A7A6E]">Disease</TableHead>
@@ -391,7 +391,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
         </div>
 
         {/* Right Column - 35% */}
-        <div className="space-y-6">
+        <div className="space-y-6 xl:col-span-1">
           {/* Climate & Disease Trends */}
           <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
             <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
@@ -498,7 +498,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
 
   // Outbreaks Content
   const renderOutbreaks = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-x-hidden">
       <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
         <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
           <div className="flex items-center justify-between">
@@ -527,8 +527,8 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[980px]">
             <TableHeader>
               <TableRow className="bg-[#F7F5F0]">
                 <TableHead className="text-[#7A7A6E]">Disease Name</TableHead>
@@ -574,8 +574,8 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
                   {expandedOutbreak === outbreak.id && (
                     <TableRow>
                       <TableCell colSpan={8} className="bg-[#F7F5F0] p-6">
-                        <div className="grid grid-cols-3 gap-6">
-                          <div className="col-span-2 space-y-4">
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                          <div className="xl:col-span-2 space-y-4">
                             <div>
                               <h4 className="text-sm font-medium text-gray-900 mb-2">Outbreak Details</h4>
                               <div className="bg-white rounded-lg p-4 border border-[#E5E3DC]">
@@ -664,7 +664,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {farmCompliance.filter(f => f.status === 'Critical').map((farm) => (
               <div key={farm.id} className="bg-[#C0392B]/10 border border-[#C0392B]/30 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-2">{farm.name}</h4>
@@ -712,8 +712,8 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow className="bg-[#F7F5F0]">
                 <TableHead className="text-[#7A7A6E]">Farm Name</TableHead>
@@ -760,10 +760,10 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
 
   // AMU Analytics Content
   const renderAMU = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-6">
+    <div className="space-y-6 w-full overflow-x-hidden">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Time Series Chart */}
-        <Card className="col-span-2 bg-white rounded-2xl border border-[#E5E3DC]">
+        <Card className="xl:col-span-2 bg-white rounded-2xl border border-[#E5E3DC]">
           <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
             <CardTitle className="flex items-center gap-2 text-gray-900">
               <TrendingUp className="w-5 h-5 text-[#1B5E42]" />
@@ -878,7 +878,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
 
   // Contact Tracing Content
   const renderContactTracing = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-x-hidden">
       <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
         <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
           <CardTitle className="flex items-center gap-2 text-gray-900">
@@ -956,7 +956,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
           </div>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {stateRiskData.map((state) => (
               <div
                 key={state.state}
@@ -984,7 +984,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
 
   // Reports Content
   const renderReports = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-x-hidden">
       <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
         <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
           <CardTitle className="flex items-center gap-2 text-gray-900">
@@ -993,7 +993,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {reportTemplates.map((template) => {
               const Icon = template.icon;
               return (
@@ -1064,15 +1064,15 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] flex">
-      {/* Left Sidebar */}
-      <aside className="w-64 bg-white border-r border-[#E5E3DC] flex flex-col">
+    <div className="min-h-screen bg-[#F7F5F0] flex overflow-x-hidden">
+      {/* Fixed Left Sidebar */}
+      <aside className="w-64 bg-white border-r border-[#E5E3DC] flex flex-col fixed h-screen">
         <div className="p-6 border-b border-[#E5E3DC]">
           <img src={logoImg} alt="Kavach Logo" className="h-10" />
           <p className="text-xs text-[#7A7A6E] mt-2">National Surveillance Portal</p>
         </div>
         
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeNav === item.id;
@@ -1103,9 +1103,9 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 ml-64 min-w-0 flex flex-col">
         {/* Top Bar */}
-        <header className="bg-white border-b border-[#E5E3DC] px-8 py-5">
+        <header className="bg-white border-b border-[#E5E3DC] px-8 py-5 sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">National Disease Surveillance</h1>
             
@@ -1135,7 +1135,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-8">
           {renderContent()}
         </div>
       </main>
