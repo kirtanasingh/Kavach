@@ -1094,154 +1094,220 @@ export default function FarmOwnerDashboard({ initialNav = 'home', onNavigate, on
   );
 
   const renderRecordsScreen = () => (
-    <div className="space-y-6">
-      {/* Header with Sub-tabs */}
-      <Card className="bg-white rounded-2xl border border-[#E5E3DC]">
-        <CardHeader className="border-b border-[#E5E3DC] px-6 py-4">
-          <CardTitle className="flex items-center gap-2 text-gray-900">
-            <FileText className="w-5 h-5 text-[#1B5E42]" />
-            Farm Health Records
-          </CardTitle>
-          <div className="flex gap-2 mt-4">
-            <Button
-              variant={recordTab === 'animals' ? 'default' : 'ghost'}
-              className={recordTab === 'animals' ? 'bg-[#1B5E42] text-white' : 'text-[#7A7A6E]'}
-              onClick={() => setRecordTab('animals')}
-            >
-              Animals
-            </Button>
-            <Button
-              variant={recordTab === 'treatments' ? 'default' : 'ghost'}
-              className={recordTab === 'treatments' ? 'bg-[#1B5E42] text-white' : 'text-[#7A7A6E]'}
-              onClick={() => setRecordTab('treatments')}
-            >
-              Treatments
-            </Button>
-            <Button
-              variant={recordTab === 'compliance' ? 'default' : 'ghost'}
-              className={recordTab === 'compliance' ? 'bg-[#1B5E42] text-white' : 'text-[#7A7A6E]'}
-              onClick={() => setRecordTab('compliance')}
-            >
-              Compliance
-            </Button>
+    <div className="space-y-6 w-full overflow-x-hidden">
+      <Card className="bg-white rounded-2xl border border-[#E5E3DC] overflow-hidden">
+        <CardHeader className="border-b border-[#E5E3DC] px-6 py-5 bg-gradient-to-r from-[#F7F5F0] to-white">
+          <div className="flex flex-col gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-gray-900">
+                <FileText className="w-5 h-5 text-[#1B5E42]" />
+                Farm Health Records
+              </CardTitle>
+              <p className="text-sm text-[#7A7A6E] mt-1">Track animal profile, treatment history, and compliance readiness in one place.</p>
+            </div>
+
+            <div className="inline-flex flex-wrap gap-2 rounded-xl p-1 bg-[#F7F5F0] border border-[#E5E3DC] w-fit">
+              <Button
+                variant={recordTab === 'animals' ? 'default' : 'ghost'}
+                className={`rounded-lg px-4 ${recordTab === 'animals' ? 'bg-[#1B5E42] text-white hover:bg-[#164E36]' : 'text-[#7A7A6E] hover:bg-white'}`}
+                onClick={() => setRecordTab('animals')}
+              >
+                Animals
+              </Button>
+              <Button
+                variant={recordTab === 'treatments' ? 'default' : 'ghost'}
+                className={`rounded-lg px-4 ${recordTab === 'treatments' ? 'bg-[#1B5E42] text-white hover:bg-[#164E36]' : 'text-[#7A7A6E] hover:bg-white'}`}
+                onClick={() => setRecordTab('treatments')}
+              >
+                Treatments
+              </Button>
+              <Button
+                variant={recordTab === 'compliance' ? 'default' : 'ghost'}
+                className={`rounded-lg px-4 ${recordTab === 'compliance' ? 'bg-[#1B5E42] text-white hover:bg-[#164E36]' : 'text-[#7A7A6E] hover:bg-white'}`}
+                onClick={() => setRecordTab('compliance')}
+              >
+                Compliance
+              </Button>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+
+        <CardContent className="p-6 bg-[#FCFBF8]">
           {recordTab === 'animals' && (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-[#F7F5F0]">
-                  <TableHead className="text-[#7A7A6E]">Tag Number</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Species</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Age</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Health Status</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Last Checkup</TableHead>
-                  <TableHead className="text-[#7A7A6E]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recordsAnimals.map(animal => (
-                  <TableRow key={animal.id} className="hover:bg-[#F7F5F0]">
-                    <TableCell className="font-medium text-gray-900">{animal.tag}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{animal.species}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{animal.age}</TableCell>
-                    <TableCell>
-                      <Badge className={`${getStatusStyle(animal.status)} px-2 py-1 text-xs rounded-full`}>
-                        {animal.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-[#7A7A6E]">{animal.lastCheckup}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="sm" className="text-[#1B5E42]">
-                        View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          {recordTab === 'treatments' && (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-[#F7F5F0]">
-                  <TableHead className="text-[#7A7A6E]">Animal</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Diagnosis</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Vet Message</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Review</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Date</TableHead>
-                  <TableHead className="text-[#7A7A6E]">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recordsTreatments.map(treatment => (
-                  <TableRow key={treatment.id} className="hover:bg-[#F7F5F0]">
-                    <TableCell className="font-medium text-gray-900">{treatment.animal}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{treatment.diagnosis}</TableCell>
-                    <TableCell className="text-[#7A7A6E] max-w-xs truncate" title={treatment.vetMessage}>{treatment.vetMessage}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{treatment.review}</TableCell>
-                    <TableCell className="text-[#7A7A6E]">{treatment.date}</TableCell>
-                    <TableCell>
-                      <Badge className={`${getStatusStyle(treatment.status)} px-2 py-1 text-xs rounded-full`}>
-                        {treatment.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          {recordTab === 'compliance' && (
-            <div className="p-6 space-y-6">
-              {/* Compliance Score Gauge */}
-              <div className="flex items-center justify-center">
-                <div className="relative w-40 h-40">
-                  <svg className="w-full h-full" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#F7F5F0" strokeWidth="8" />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke="#1B5E42"
-                      strokeWidth="8"
-                      strokeDasharray={`${compliancePct * 2.51} 251`}
-                      strokeLinecap="round"
-                      transform="rotate(-90 50 50)"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-3xl font-bold text-gray-900">{compliancePct}%</span>
-                    <span className="text-sm text-[#7A7A6E]">Compliant</span>
-                  </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-4">
+                  <p className="text-xs text-[#7A7A6E]">Total Animal Records</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{recordsAnimals.length}</p>
+                </div>
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-4">
+                  <p className="text-xs text-[#7A7A6E]">Healthy Status</p>
+                  <p className="text-2xl font-bold text-[#1B5E42] mt-1">{recordsAnimals.filter((a) => a.status === 'Healthy').length}</p>
+                </div>
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-4">
+                  <p className="text-xs text-[#7A7A6E]">Under Review</p>
+                  <p className="text-2xl font-bold text-[#E8A838] mt-1">{recordsAnimals.filter((a) => a.status !== 'Healthy').length}</p>
                 </div>
               </div>
 
-              {/* Compliance Items List */}
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-[#F7F5F0]">
-                    <TableHead className="text-[#7A7A6E]">Item</TableHead>
-                    <TableHead className="text-[#7A7A6E]">Status</TableHead>
-                    <TableHead className="text-[#7A7A6E]">Last Review</TableHead>
-                    <TableHead className="text-[#7A7A6E]">Next Due</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {complianceRows.map(item => (
-                    <TableRow key={item.id} className="hover:bg-[#F7F5F0]">
-                      <TableCell className="font-medium text-gray-900">{item.item}</TableCell>
-                      <TableCell>
-                        <Badge className={`${getStatusStyle(item.status)} px-2 py-1 text-xs rounded-full`}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-[#7A7A6E]">{item.lastReview}</TableCell>
-                      <TableCell className="text-[#7A7A6E]">{item.nextDue}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="rounded-xl border border-[#E5E3DC] bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[760px]">
+                    <TableHeader>
+                      <TableRow className="bg-[#F7F5F0]">
+                        <TableHead className="text-[#7A7A6E]">Tag Number</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Species</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Age</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Health Status</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Last Checkup</TableHead>
+                        <TableHead className="text-[#7A7A6E]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recordsAnimals.map((animal) => (
+                        <TableRow key={animal.id} className="hover:bg-[#F7F5F0]">
+                          <TableCell className="font-medium text-gray-900">{animal.tag}</TableCell>
+                          <TableCell className="text-[#7A7A6E]">{animal.species}</TableCell>
+                          <TableCell className="text-[#7A7A6E]">{animal.age}</TableCell>
+                          <TableCell>
+                            <Badge className={`${getStatusStyle(animal.status)} px-2 py-1 text-xs rounded-full`}>
+                              {animal.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-[#7A7A6E]">{animal.lastCheckup}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm" className="text-[#1B5E42] hover:bg-[#EAF4EF]">
+                              View
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {recordTab === 'treatments' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-4">
+                  <p className="text-xs text-[#7A7A6E]">Treatment Entries</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{recordsTreatments.length}</p>
+                </div>
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-4">
+                  <p className="text-xs text-[#7A7A6E]">Marked Safe</p>
+                  <p className="text-2xl font-bold text-[#1B5E42] mt-1">{recordsTreatments.filter((t) => t.review.toLowerCase().includes('safe')).length}</p>
+                </div>
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-4">
+                  <p className="text-xs text-[#7A7A6E]">Needs Follow-up</p>
+                  <p className="text-2xl font-bold text-[#C0392B] mt-1">{recordsTreatments.filter((t) => t.review.toLowerCase().includes('not')).length}</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#E5E3DC] bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[920px]">
+                    <TableHeader>
+                      <TableRow className="bg-[#F7F5F0]">
+                        <TableHead className="text-[#7A7A6E]">Animal</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Diagnosis</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Vet Message</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Review</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Date</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recordsTreatments.map((treatment) => (
+                        <TableRow key={treatment.id} className="hover:bg-[#F7F5F0] align-top">
+                          <TableCell className="font-medium text-gray-900">{treatment.animal}</TableCell>
+                          <TableCell className="text-[#7A7A6E]">{treatment.diagnosis}</TableCell>
+                          <TableCell className="text-[#7A7A6E] max-w-[320px] whitespace-normal leading-relaxed">{treatment.vetMessage}</TableCell>
+                          <TableCell className="text-[#7A7A6E]">{treatment.review}</TableCell>
+                          <TableCell className="text-[#7A7A6E]">{treatment.date}</TableCell>
+                          <TableCell>
+                            <Badge className={`${getStatusStyle(treatment.status)} px-2 py-1 text-xs rounded-full`}>
+                              {treatment.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {recordTab === 'compliance' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-5 flex items-center justify-center">
+                  <div className="relative w-40 h-40">
+                    <svg className="w-full h-full" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="#F7F5F0" strokeWidth="8" />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        fill="none"
+                        stroke="#1B5E42"
+                        strokeWidth="8"
+                        strokeDasharray={`${compliancePct * 2.51} 251`}
+                        strokeLinecap="round"
+                        transform="rotate(-90 50 50)"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-bold text-gray-900">{compliancePct}%</span>
+                      <span className="text-sm text-[#7A7A6E]">Compliant</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-5">
+                  <p className="text-xs text-[#7A7A6E]">Compliant Checks</p>
+                  <p className="text-3xl font-bold text-[#1B5E42] mt-1">{safeCount}</p>
+                  <p className="text-xs text-[#7A7A6E] mt-2">Records marked safe by vet review.</p>
+                </div>
+
+                <div className="rounded-xl border border-[#E5E3DC] bg-white p-5">
+                  <p className="text-xs text-[#7A7A6E]">Pending / Attention</p>
+                  <p className="text-3xl font-bold text-[#C0392B] mt-1">{Math.max(detectionHistory.length - safeCount, 0)}</p>
+                  <p className="text-xs text-[#7A7A6E] mt-2">Needs review follow-up or corrective action.</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#E5E3DC] bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[760px]">
+                    <TableHeader>
+                      <TableRow className="bg-[#F7F5F0]">
+                        <TableHead className="text-[#7A7A6E]">Item</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Status</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Last Review</TableHead>
+                        <TableHead className="text-[#7A7A6E]">Next Due</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {complianceRows.map((item) => (
+                        <TableRow key={item.id} className="hover:bg-[#F7F5F0]">
+                          <TableCell className="font-medium text-gray-900">{item.item}</TableCell>
+                          <TableCell>
+                            <Badge className={`${getStatusStyle(item.status)} px-2 py-1 text-xs rounded-full`}>
+                              {item.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-[#7A7A6E]">{item.lastReview}</TableCell>
+                          <TableCell className="text-[#7A7A6E]">{item.nextDue}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
