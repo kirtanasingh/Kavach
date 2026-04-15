@@ -44,6 +44,7 @@ SPLIT_RATIOS: Tuple[float, float, float] = (0.70, 0.20, 0.10)  # train/valid/tes
 SPLITS: List[str] = ["train", "valid", "test"]
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 RANDOM_SEED = 42
+MIN_IMAGES_PER_CLASS = 20
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +145,15 @@ def ingest_with_existing_splits(
             if normalized in {"unlabeled", "unlabelled"}:
                 continue
             class_name = f"{prefix}_{normalized}"
+            imgs = collect_images(class_dir)
+            if len(imgs) < MIN_IMAGES_PER_CLASS:
+                print(
+                    f"    [WARN] Skipping class '{class_dir.name}' in split '{split}' "
+                    f"(only {len(imgs)} images)."
+                )
+                continue
             dst_dir = out_dir / split / class_name
             dst_dir.mkdir(parents=True, exist_ok=True)
-            imgs = collect_images(class_dir)
             for img in imgs:
                 copy_file(img, dst_dir / img.name)
                 counts[split] += 1
@@ -218,6 +225,12 @@ def ingest_flat_classes(
         imgs = collect_images(class_dir)
         if not imgs:
             print(f"    [WARN] No images in class folder '{class_dir.name}', skipping.")
+            continue
+        if len(imgs) < MIN_IMAGES_PER_CLASS:
+            print(
+                f"    [WARN] Skipping class folder '{class_dir.name}' "
+                f"(only {len(imgs)} images)."
+            )
             continue
         class_name = f"{prefix}_{normalized}"
         split_map = split_files(imgs, SPLIT_RATIOS)

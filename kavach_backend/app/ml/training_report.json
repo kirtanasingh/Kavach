@@ -1,37 +1,58 @@
 {
-  "num_classes": 19,
+  "num_classes": 16,
   "classes": [
-    "cattle_coccidiosis",
+    "cattle_foot_and_mouth",
     "cattle_healthy",
-    "cattle_new_castle_disease",
-    "cattle_salmonella",
-    "pig_Healthy",
-    "pig_Infected_Bacterial_Erysipelas",
-    "pig_Infected_Bacterial_Greasy_Pig_Disease",
-    "pig_Infected_Environmental_Dermatitis",
-    "pig_Infected_Environmental_Sunburn",
-    "pig_Infected_Fungal_Pityriasis_Rosea",
-    "pig_Infected_Fungal_Ringworm",
-    "pig_Infected_Parasitic_Mange",
-    "pig_Infected_Viral_Foot_and_Mouth_Disease",
-    "pig_Infected_Viral_Swinepox",
-    "pig_Unlabeled",
-    "poultry_cocci",
+    "cattle_lumpy",
+    "cattle_lumpy_skin",
+    "pig_healthy",
+    "pig_infected_bacterial_erysipelas",
+    "pig_infected_bacterial_greasy_pig_disease",
+    "pig_infected_environmental_dermatitis",
+    "pig_infected_environmental_sunburn",
+    "pig_infected_fungal_pityriasis_rosea",
+    "pig_infected_fungal_ringworm",
+    "pig_infected_parasitic_mange",
+    "pig_infected_viral_foot_and_mouth_disease",
+    "pig_infected_viral_swinepox",
     "poultry_healthy",
-    "poultry_ncd",
-    "poultry_salmo"
+    "poultry_unhealthy"
   ],
-  "best_valid_acc": 0.31184,
-  "epochs_phase1": 1,
-  "epochs_phase2": 0,
+  "best_valid_acc": 0.68952,
+  "epochs_phase1": 3,
+  "epochs_phase2": 1,
   "history": [
     {
       "phase": "head",
       "epoch": 1,
-      "train_loss": 2.05056,
-      "train_acc": 0.4249,
-      "valid_loss": 2.47364,
-      "valid_acc": 0.31184
+      "train_loss": 2.18223,
+      "train_acc": 0.38626,
+      "valid_loss": 1.92467,
+      "valid_acc": 0.48756
+    },
+    {
+      "phase": "head",
+      "epoch": 2,
+      "train_loss": 1.69032,
+      "train_acc": 0.54911,
+      "valid_loss": 1.77079,
+      "valid_acc": 0.5405
+    },
+    {
+      "phase": "head",
+      "epoch": 3,
+      "train_loss": 1.6229,
+      "train_acc": 0.5757,
+      "valid_loss": 1.87405,
+      "valid_acc": 0.48888
+    },
+    {
+      "phase": "finetune",
+      "epoch": 1,
+      "train_loss": 1.34641,
+      "train_acc": 0.69766,
+      "valid_loss": 1.3654,
+      "valid_acc": 0.68952
     }
   ]
 }
