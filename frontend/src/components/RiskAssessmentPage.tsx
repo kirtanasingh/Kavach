@@ -7,7 +7,7 @@ import { mockDB } from "../services/mockDatabase";
 
 interface RiskAssessmentPageProps {
   onNavigate: (screen: string) => void;
-  onComplete: (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' }) => void;
+  onComplete: (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority' }) => void;
   userEmail: string;
   userName: string;
 }

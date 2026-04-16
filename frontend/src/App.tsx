@@ -9,7 +9,6 @@ import { RegisterPage } from "./components/RegisterPage";
 import { MarketingHomepage } from "./components/MarketingHomepage";
 import FarmOwnerDashboard from "./components/FarmOwnerDashboard";
 import FarmOwnerDesktopDashboard from "./components/FarmOwnerDesktopDashboard";
-import { FarmWorkerDashboard } from "./components/FarmWorkerDashboard";
 import { VetDashboard } from "./components/VetDashboard";
 import { AuthorityDashboard } from "./components/AuthorityDashboard";
 import { FarmDetailsPage } from "./components/FarmDetailsPage";
@@ -41,7 +40,6 @@ const SCREEN_TO_PATH: Record<string, string> = {
   'farm-details': '/onboarding/farm-details',
   'risk-assessment': '/onboarding/risk-assessment',
   'farm-owner-dashboard': '/dashboard',
-  'farm-worker-dashboard': '/dashboard/worker',
   'vet-dashboard': '/dashboard/vet',
   'authority-dashboard': '/dashboard/authority',
   'farm-owner-desktop': '/dashboard/farm-owner-desktop',
@@ -62,7 +60,6 @@ function getScreenFromPath(pathname: string): string {
     ['/register', 'register'],
     ['/onboarding/farm-details', 'farm-details'],
     ['/onboarding/risk-assessment', 'risk-assessment'],
-    ['/dashboard/worker', 'farm-worker-dashboard'],
     ['/dashboard/vet', 'vet-dashboard'],
     ['/dashboard/authority', 'authority-dashboard'],
     ['/dashboard/farm-owner-desktop', 'farm-owner-desktop'],
@@ -84,16 +81,16 @@ function AppContent() {
 
   const [user, setUser] = useState<{
     name: string;
-    role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority';
+    role: 'Farm Owner' | 'Veterinarian' | 'Authority';
     email?: string;
   } | null>(null);
 
-  // Shared tasks state - using generic worker names that match common login names
+  // Shared tasks state used by farm-owner task views.
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: 1,
       description: "Clean cattle shed in Building A",
-      worker: "Farm Worker", // Generic name that will match any worker login
+      worker: "Farm Staff",
       status: "pending",
       dueDate: "Today",
       reference: "https://youtube.com/watch?v=cleaning-guide",
@@ -103,7 +100,7 @@ function AppContent() {
     {
       id: 2,
       description: "Check water system in pig pens",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "worker_done",
       dueDate: "Today",
       reference: "https://docs.farm.com/water-systems",
@@ -113,7 +110,7 @@ function AppContent() {
     {
       id: 3,
       description: "Vaccinate poultry in Building C",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "approved",
       dueDate: "Yesterday",
       reference: "https://youtube.com/watch?v=vaccination-guide",
@@ -123,7 +120,7 @@ function AppContent() {
     {
       id: 4,
       description: "Feed distribution - morning round",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "worker_done",
       dueDate: "Today",
       reference: "https://docs.farm.com/feeding-schedule",
@@ -133,7 +130,7 @@ function AppContent() {
     {
       id: 5,
       description: "Health check on sick cow in Building B",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "pending",
       dueDate: "Today",
       reference: "https://youtube.com/watch?v=health-check-guide",
@@ -148,14 +145,11 @@ function AppContent() {
 
   const currentScreen = useMemo(() => getScreenFromPath(location.pathname), [location.pathname]);
 
-  const handleLogin = (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority'; email?: string }) => {
+  const handleLogin = (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority'; email?: string }) => {
     setUser(userData);
     switch (userData.role) {
       case 'Farm Owner':
         navigate('/dashboard');
-        break;
-      case 'Farm Worker':
-        navigate('/dashboard/worker');
         break;
       case 'Veterinarian':
         navigate('/dashboard/vet');
@@ -166,15 +160,12 @@ function AppContent() {
     }
   };
 
-  const handleRegister = (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority'; email?: string }) => {
+  const handleRegister = (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority'; email?: string }) => {
     setUser(userData);
     if (userData.role === 'Farm Owner') {
       navigate('/onboarding/farm-details');
     } else {
       switch (userData.role) {
-        case 'Farm Worker':
-          navigate('/dashboard/worker');
-          break;
         case 'Veterinarian':
           navigate('/dashboard/vet');
           break;
@@ -212,7 +203,6 @@ function AppContent() {
     'risk-assessment',
     'farm-owner-dashboard',
     'farm-owner-desktop',
-    'farm-worker-dashboard',
     'vet-dashboard',
     'authority-dashboard',
     'amu-logging',
@@ -275,24 +265,6 @@ function AppContent() {
                 tasks={tasks}
                 onTaskUpdate={handleTaskUpdate}
                 onAddTask={addNewTask}
-              />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-        <Route
-          path="/dashboard/worker"
-          element={
-            user ? (
-              <FarmWorkerDashboard
-                onNavigate={navigateByScreen}
-                onLogout={handleLogout}
-                userName={user.name}
-                workerName={user.name}
-                userRole={user.role}
-                tasks={tasks}
-                onTaskUpdate={handleTaskUpdate}
               />
             ) : (
               <Navigate to="/login" replace />

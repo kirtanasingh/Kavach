@@ -7,7 +7,7 @@ import logoImg from 'figma:asset/28cc7f8b67ba61bb13e03c30f73fd05e9d3d8a2c.png';
 
 interface LoginPageProps {
   onNavigate: (screen: string) => void;
-  onLogin: (user: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority'; email: string }) => void;
+  onLogin: (user: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority'; email: string }) => void;
 }
 
 export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
@@ -21,7 +21,7 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
     e.preventDefault();
     if (isLogin) {
       // Default login credentials - map email to role
-      let userRole: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority' = 'Farm Owner';
+      let userRole: 'Farm Owner' | 'Veterinarian' | 'Authority' = 'Farm Owner';
       let userName = name || 'Demo User';
       
       if (email === 'farm@kavach.in' || email === '' || !email) {
@@ -38,14 +38,12 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
       onLogin({ name: userName, role: userRole, email: email || 'farm@kavach.in' });
     } else {
       // Register flow - convert role string to proper type
-      let userRole: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority' = 'Farm Owner';
+      let userRole: 'Farm Owner' | 'Veterinarian' | 'Authority' = 'Farm Owner';
       
       if (role === 'vet') {
         userRole = 'Veterinarian';
       } else if (role === 'authority') {
         userRole = 'Authority';
-      } else if (role === 'farm-worker') {
-        userRole = 'Farm Worker';
       } else {
         userRole = 'Farm Owner';
       }

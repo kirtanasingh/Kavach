@@ -22,7 +22,7 @@ interface Alert {
 }
 
 interface AlertsComponentProps {
-  userRole: 'Farm Owner' | 'Farm Worker' | 'Veterinarian';
+  userRole: 'Farm Owner' | 'Veterinarian' | 'Authority';
 }
 
 export function AlertsComponent({ userRole }: AlertsComponentProps) {
@@ -72,25 +72,6 @@ export function AlertsComponent({ userRole }: AlertsComponentProps) {
           }
         ];
       
-      case 'Farm Worker':
-        return [
-          ...baseAlerts,
-          {
-            id: 4,
-            title: "Feed inventory running low",
-            timestamp: "30 min ago",
-            status: "warning",
-            icon: "alert"
-          },
-          {
-            id: 5,
-            title: "Task approved by farm owner",
-            timestamp: "1.5 hours ago",
-            status: "info",
-            icon: "info"
-          }
-        ];
-      
       case 'Veterinarian':
         return [
           {
@@ -120,6 +101,25 @@ export function AlertsComponent({ userRole }: AlertsComponentProps) {
             timestamp: "2 hours ago",
             status: "info",
             icon: "users"
+          }
+        ];
+
+      case 'Authority':
+        return [
+          ...baseAlerts,
+          {
+            id: 4,
+            title: "Regional compliance report published",
+            timestamp: "40 min ago",
+            status: "info",
+            icon: "shield"
+          },
+          {
+            id: 5,
+            title: "Outbreak watchlist updated",
+            timestamp: "2 hours ago",
+            status: "warning",
+            icon: "alert"
           }
         ];
       

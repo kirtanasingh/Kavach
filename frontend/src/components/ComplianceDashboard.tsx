@@ -43,7 +43,7 @@ interface FarmSummary {
 interface ComplianceDashboardProps {
   onNavigate: (screen: string) => void;
   userName: string;
-  userRole: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority';
+  userRole: 'Farm Owner' | 'Veterinarian' | 'Authority';
 }
 
 // Mock compliance data
@@ -330,7 +330,6 @@ export function ComplianceDashboard({ onNavigate, userName, userRole }: Complian
   const getDashboardRoute = () => {
     switch (userRole) {
       case 'Farm Owner': return 'farm-owner-dashboard';
-      case 'Farm Worker': return 'farm-worker-dashboard';
       case 'Veterinarian': return 'vet-dashboard';
       case 'Authority': return 'authority-dashboard';
       default: return 'home';

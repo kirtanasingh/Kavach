@@ -7,7 +7,7 @@ export interface User {
   email: string;
   phoneNumber: string;
   dateOfBirth: string;
-  role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority';
+  role: 'Farm Owner' | 'Veterinarian' | 'Authority';
   streetAddress: string;
   city: string;
   state: string;
@@ -85,7 +85,7 @@ export interface AuthResult {
   success: boolean;
   user?: {
     name: string;
-    role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority';
+    role: 'Farm Owner' | 'Veterinarian' | 'Authority';
     email?: string;
   };
   error?: string;
@@ -123,21 +123,6 @@ class MockDatabase {
         postalCode: '400001',
         country: 'india',
         password: 'owner123',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'demo-worker-1',
-        fullName: 'John Smith',
-        email: 'worker@kavach.com',
-        phoneNumber: '+91 9876543211',
-        dateOfBirth: '1990-07-22',
-        role: 'Farm Worker',
-        streetAddress: '456 Worker Street',
-        city: 'Pune',
-        state: 'Maharashtra',
-        postalCode: '411001',
-        country: 'india',
-        password: 'worker123',
         createdAt: new Date().toISOString()
       },
       {
@@ -194,12 +179,10 @@ class MockDatabase {
   }
 
   // Map role values from form to system format
-  private mapRoleFromForm(formRole: string): 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority' {
+  private mapRoleFromForm(formRole: string): 'Farm Owner' | 'Veterinarian' | 'Authority' {
     switch (formRole) {
       case 'farm-owner':
         return 'Farm Owner';
-      case 'farm-worker':
-        return 'Farm Worker';
       case 'vet':
         return 'Veterinarian';
       case 'authority':
@@ -262,19 +245,6 @@ class MockDatabase {
       const input = emailOrUsername.toLowerCase();
       if (input.includes('owner') || input === 'owner') {
         user = users.find(u => u.role === 'Farm Owner');
-        // For legacy demo, accept any password
-        if (user) {
-          return {
-            success: true,
-            user: {
-              name: user.fullName,
-              role: user.role,
-              email: user.email
-            }
-          };
-        }
-      } else if (input.includes('worker') || input === 'worker') {
-        user = users.find(u => u.role === 'Farm Worker');
         // For legacy demo, accept any password
         if (user) {
           return {

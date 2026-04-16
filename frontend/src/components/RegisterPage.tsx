@@ -11,7 +11,7 @@ import kavachLogo from 'figma:asset/2a4372773a3b5a42d85c8677296ad91523020f1f.png
 
 interface RegisterPageProps {
   onNavigate: (screen: string) => void;
-  onRegister: (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority'; email?: string }) => void;
+  onRegister: (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority'; email?: string }) => void;
 }
 
 interface ValidationErrors {
@@ -452,7 +452,6 @@ export function RegisterPage({ onNavigate, onRegister }: RegisterPageProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="farm-owner">Farm Owner</SelectItem>
-                    <SelectItem value="farm-worker">Farm Worker</SelectItem>
                     <SelectItem value="vet">Veterinarian</SelectItem>
                     <SelectItem value="authority">Authority/Government</SelectItem>
                   </SelectContent>
