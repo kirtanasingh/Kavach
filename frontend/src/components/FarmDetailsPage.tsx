@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
 import { ArrowLeft, ArrowRight, Building2, Users, Calendar, MapPin, AlertCircle, CheckCircle } from "lucide-react";
-import { useState } from "react";
-import { mockDB } from "../services/mockDatabase";
+import { useEffect, useState } from "react";
+import { farmOwnerService } from "../services/farmOwnerService";
 
 interface FarmDetailsPageProps {
   onNavigate: (screen: string) => void;
@@ -22,6 +22,7 @@ interface ValidationErrors {
 export function FarmDetailsPage({ onNavigate, userEmail, userName }: FarmDetailsPageProps) {
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasExistingFarm, setHasExistingFarm] = useState(false);
   const [formData, setFormData] = useState({
     farmName: '',
     farmType: '',
@@ -36,6 +37,31 @@ export function FarmDetailsPage({ onNavigate, userEmail, userName }: FarmDetails
     annualRevenue: '',
     farmDescription: ''
   });
+
+  useEffect(() => {
+    const loadFarm = async () => {
+      try {
+        const farm = await farmOwnerService.getFarm();
+        setHasExistingFarm(true);
+        setFormData((prev) => ({
+          ...prev,
+          farmName: farm.farm_name ?? "",
+          farmType: farm.farm_type ?? "",
+          farmSize: farm.farm_size != null ? String(farm.farm_size) : "",
+          sizeUnit: farm.size_unit ?? "acres",
+          establishedYear: farm.established_year != null ? String(farm.established_year) : "",
+          totalAnimals: farm.total_animals != null ? String(farm.total_animals) : "",
+          primaryProducts: (farm.primary_products ?? []).join(", "),
+          annualRevenue: farm.annual_revenue != null ? String(farm.annual_revenue) : "",
+          farmDescription: farm.description ?? "",
+        }));
+      } catch {
+        setHasExistingFarm(false);
+      }
+    };
+
+    loadFarm();
+  }, []);
 
   const animalTypeOptions = [
     'Pigs/Swine',
@@ -174,17 +200,30 @@ export function FarmDetailsPage({ onNavigate, userEmail, userName }: FarmDetails
     // If no errors, proceed to save farm details and move to risk assessment
     if (Object.keys(newErrors).length === 0) {
       try {
-        // Save farm details to mock database
-        const result = mockDB.saveFarmDetails(userEmail, formData);
-        
-        if (result.success) {
-          // Move to risk assessment
-          onNavigate('risk-assessment');
+        const payload = {
+          farm_name: formData.farmName,
+          farm_type: formData.farmType || undefined,
+          farm_size: formData.farmSize ? Number(formData.farmSize) : undefined,
+          size_unit: formData.sizeUnit || undefined,
+          established_year: formData.establishedYear ? Number(formData.establishedYear) : undefined,
+          total_animals: formData.totalAnimals ? Number(formData.totalAnimals) : undefined,
+          primary_products: formData.primaryProducts
+            ? formData.primaryProducts.split(",").map((v) => v.trim()).filter(Boolean)
+            : undefined,
+          annual_revenue: formData.annualRevenue ? Number(formData.annualRevenue) : undefined,
+          description: formData.farmDescription || undefined,
+        };
+
+        if (hasExistingFarm) {
+          await farmOwnerService.updateFarm(payload);
         } else {
-          setErrors({
-            farmName: result.error || 'Failed to save farm details. Please try again.'
+          await farmOwnerService.createFarm({
+            farm_name: formData.farmName,
+            ...payload,
           });
         }
+
+        onNavigate('risk-assessment');
       } catch (error) {
         setErrors({
           farmName: 'Failed to save farm details. Please try again.'

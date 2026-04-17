@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -38,11 +38,16 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import logoImg from 'figma:asset/28cc7f8b67ba61bb13e03c30f73fd05e9d3d8a2c.png';
+import { ProfileMenu } from './ProfileMenu';
+import { getAccessToken } from '../services/authService';
+import { InterFarmNetwork } from './InterFarmNetwork';
+import { fetchAuthoritySummary } from '../services/authorityService';
 
 interface AuthorityDashboardProps {
   onNavigate: (screen: string) => void;
   onLogout: () => void;
   userName: string;
+  userEmail?: string;
 }
 
 interface OutbreakData {
@@ -69,7 +74,16 @@ interface FarmComplianceData {
   status: 'Compliant' | 'Warning' | 'Critical';
 }
 
-export function AuthorityDashboard({ onNavigate, onLogout, userName }: AuthorityDashboardProps) {
+interface AuthorityNotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  level: 'critical' | 'warning' | 'info';
+  timestamp: string;
+  isRead: boolean;
+}
+
+export function AuthorityDashboard({ onNavigate, onLogout, userName, userEmail }: AuthorityDashboardProps) {
   const [activeNav, setActiveNav] = useState('dashboard');
   const [expandedOutbreak, setExpandedOutbreak] = useState<number | null>(null);
   const [selectedState, setSelectedState] = useState('all');
@@ -77,14 +91,67 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
   const [searchTerm, setSearchTerm] = useState('');
   const [bellShake, setBellShake] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const accessToken = getAccessToken() ?? undefined;
+  const [notifications, setNotifications] = useState<AuthorityNotificationItem[]>([
+    {
+      id: 'auth-n1',
+      title: 'Cluster escalation in Maharashtra',
+      message: '3 linked farms changed to At risk in the last 4 hours.',
+      level: 'critical',
+      timestamp: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+      isRead: false,
+    },
+    {
+      id: 'auth-n2',
+      title: 'Compliance dip detected',
+      message: 'State compliance dropped below 80% in one district.',
+      level: 'warning',
+      timestamp: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
+      isRead: false,
+    },
+    {
+      id: 'auth-n3',
+      title: 'Weekly AMU digest ready',
+      message: 'A new AMU summary report is available for export.',
+      level: 'info',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+      isRead: true,
+    },
+  ]);
 
-  // Static stats — no animation
-  const stats = {
+  const [stats, setStats] = useState({
     totalFarms: 2847,
     activeAlerts: 18,
     complianceRate: 87,
-    criticalOutbreaks: 3
-  };
+    criticalOutbreaks: 3,
+  });
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadSummary = async () => {
+      try {
+        const data = await fetchAuthoritySummary(accessToken);
+        if (isCancelled) return;
+        setStats({
+          totalFarms: data.total_farms,
+          activeAlerts: data.active_alerts,
+          complianceRate: data.compliance_rate,
+          criticalOutbreaks: data.critical_outbreaks,
+        });
+      } catch {
+        // Keep last known values if endpoint is temporarily unavailable.
+      }
+    };
+
+    loadSummary();
+    const intervalId = window.setInterval(loadSummary, 15000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [accessToken]);
 
   const handleNavClick = (navId: string) => {
     setActiveNav(navId);
@@ -97,6 +164,14 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
       setBellShake(true);
       setTimeout(() => setBellShake(false), 400);
     }
+  };
+
+  const unreadNotifications = notifications.filter((item) => !item.isRead).length;
+  const markNotificationAsRead = (id: string) => {
+    setNotifications((prev) => prev.map((item) => (item.id === id ? { ...item, isRead: true } : item)));
+  };
+  const markAllNotificationsRead = () => {
+    setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
   };
 
   // Outbreak data
@@ -158,15 +233,6 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
     { class: 'Aminoglycosides', usage: 210 },
   ];
 
-  // Contact tracing network data
-  const contactNetwork = [
-    { farmId: 1, farmName: "Green Valley", connections: [2, 5, 8], riskStatus: "safe", movements: 12 },
-    { farmId: 2, farmName: "Sunrise Farms", connections: [1, 3, 4], riskStatus: "infected", movements: 8 },
-    { farmId: 3, farmName: "Heritage Swine", connections: [2, 6], riskStatus: "at-risk", movements: 5 },
-    { farmId: 4, farmName: "Dairy Fresh", connections: [2, 7], riskStatus: "at-risk", movements: 6 },
-    { farmId: 5, farmName: "Mountain View", connections: [1, 9], riskStatus: "safe", movements: 4 },
-  ];
-
   // Risk map data
   const stateRiskData = [
     { state: "Maharashtra", riskLevel: 85, farms: 425, alerts: 4, compliance: 85 },
@@ -213,15 +279,6 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
       case 'Warning': return 'bg-[#E8A838] text-white';
       case 'Critical': return 'bg-[#C0392B] text-white';
       default: return 'bg-gray-200 text-gray-800';
-    }
-  };
-
-  const getRiskStatusColor = (status: string) => {
-    switch (status) {
-      case 'infected': return '#C0392B';
-      case 'at-risk': return '#E8A838';
-      case 'safe': return '#4CAF7D';
-      default: return '#7A7A6E';
     }
   };
 
@@ -887,46 +944,7 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-3 gap-6">
-            <div className="col-span-2">
-              <div className="bg-[#F7F5F0] rounded-lg h-96 flex items-center justify-center border border-[#E5E3DC]">
-                <div className="text-center">
-                  <GitBranch className="w-16 h-16 text-[#7A7A6E] mx-auto mb-4" />
-                  <p className="text-[#7A7A6E]">Network Visualization</p>
-                  <p className="text-sm text-[#7A7A6E] mt-2">Interactive node graph showing farm connections</p>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#C0392B]"></div>
-                  <span className="text-sm text-[#7A7A6E]">Infected</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#E8A838]"></div>
-                  <span className="text-sm text-[#7A7A6E]">At Risk</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#4CAF7D]"></div>
-                  <span className="text-sm text-[#7A7A6E]">Safe</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 mb-4">Farm Movement History</h4>
-              <div className="space-y-3">
-                {contactNetwork.map((farm) => (
-                  <div key={farm.farmId} className="bg-[#F7F5F0] rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2">
-                      <h5 className="font-medium text-gray-900">{farm.farmName}</h5>
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getRiskStatusColor(farm.riskStatus) }}></div>
-                    </div>
-                    <p className="text-xs text-[#7A7A6E] mb-1">Connections: {farm.connections.length}</p>
-                    <p className="text-xs text-[#7A7A6E]">Movements: {farm.movements} (last 30 days)</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <InterFarmNetwork token={accessToken} pollMs={15000} />
         </CardContent>
       </Card>
     </div>
@@ -1114,22 +1132,72 @@ export function AuthorityDashboard({ onNavigate, onLogout, userName }: Authority
                 <Search className="w-5 h-5" />
               </button>
               
-              <button className="relative text-[#7A7A6E] hover:text-gray-900 transition-colors" onClick={handleNotificationClick}>
-                <Bell className={`w-5 h-5 ${bellShake ? 'bell-shake' : ''}`} />
-                <span className="absolute -top-1 -right-1 bg-[#C0392B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                  {stats.activeAlerts}
-                </span>
-              </button>
-              
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#1B5E42] text-white flex items-center justify-center font-medium">
-                  {userName.charAt(0)}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{userName}</p>
-                  <p className="text-xs text-[#7A7A6E]">Authority Officer</p>
-                </div>
+              <div className="relative">
+                <button className="relative text-[#7A7A6E] hover:text-gray-900 transition-colors" onClick={handleNotificationClick}>
+                  <Bell className={`w-5 h-5 ${bellShake ? 'bell-shake' : ''}`} />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-[#C0392B] text-white text-xs min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center">
+                      {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-3 w-96 max-w-[90vw] rounded-2xl border border-[#E5E3DC] bg-white shadow-xl z-30">
+                    <div className="px-4 py-3 border-b border-[#E5E3DC] flex items-center justify-between">
+                      <p className="text-sm font-semibold text-gray-900">Authority Notifications</p>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-[#C0392B] text-white">{unreadNotifications}</Badge>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={markAllNotificationsRead}>
+                          Mark all read
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto p-2">
+                      {notifications.length === 0 && (
+                        <p className="px-3 py-6 text-sm text-[#7A7A6E] text-center">No notifications available.</p>
+                      )}
+                      {notifications.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => markNotificationAsRead(item.id)}
+                          className="w-full text-left rounded-xl px-3 py-3 hover:bg-[#F7F5F0] transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                              <p className="text-xs text-[#7A7A6E] mt-1">{item.message}</p>
+                            </div>
+                            <Badge
+                              className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                item.level === 'critical'
+                                  ? 'bg-[#C0392B] text-white'
+                                  : item.level === 'warning'
+                                    ? 'bg-[#E8A838] text-white'
+                                    : 'bg-[#1B5E42] text-white'
+                              }`}
+                            >
+                              {item.level}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <p className="text-[11px] text-[#7A7A6E]">{new Date(item.timestamp).toLocaleString()}</p>
+                            {!item.isRead && <span className="w-2 h-2 rounded-full bg-[#C0392B]"></span>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+              
+              <ProfileMenu
+                fallbackName={userName || 'Authority'}
+                fallbackRole="Authority"
+                fallbackEmail={userEmail}
+                onEditProfile={() => onNavigate('profile')}
+                onLogout={onLogout}
+              />
             </div>
           </div>
         </header>

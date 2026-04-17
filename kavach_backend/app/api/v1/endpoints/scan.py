@@ -3,9 +3,11 @@ import shutil
 import uuid
 import asyncio
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 
 from app.core.config import settings
+from app.core.security import get_current_user
+from app.models.schemas import UserPayload
 from app.services.analysis_service import run_disease_analysis
 from app.services.groq_service import validate_animal_image
 from app.services.postgres_service import postgres_service
@@ -15,7 +17,7 @@ router = APIRouter()
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
-async def _analyze_upload(file: UploadFile, animal_type: str) -> dict:
+async def _analyze_upload(file: UploadFile, animal_type: str, farmer_id: int | None = None) -> dict:
     print("📥 Request received")
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
@@ -47,7 +49,8 @@ async def _analyze_upload(file: UploadFile, animal_type: str) -> dict:
             # Soft-fail validation to avoid false negatives blocking real farm uploads.
             result["validation_warning"] = reason
 
-        status = "pending" if result.get("requires_vet") else "completed"
+        # Newly created detections should always await vet confirmation first.
+        status = "pending_review"
         severity = str(result.get("severity") or "unknown")
         predicted = str(result.get("disease") or "unknown")
         recommendation = str(result.get("recommendation") or "")
@@ -61,10 +64,12 @@ async def _analyze_upload(file: UploadFile, animal_type: str) -> dict:
             status=status,
             recommendation=recommendation,
             image_url=None,
+            farmer_id=farmer_id,
         )
 
         result["detection_id"] = saved.get("id")
         result["case_id"] = saved.get("case", {}).get("id")
+        result["status"] = status
         result["review_status"] = "pending"
         result["created_at"] = saved.get("created_at")
     finally:
@@ -78,24 +83,30 @@ async def _analyze_upload(file: UploadFile, animal_type: str) -> dict:
 async def analyze(
     file: UploadFile = File(...),
     animal_type: str = Form(...),
+    user: UserPayload = Depends(get_current_user),
 ):
-    return await _analyze_upload(file, animal_type)
+    farmer_id = postgres_service.resolve_or_create_farmer_scope_id(user.user_id)
+    return await _analyze_upload(file, animal_type, farmer_id)
 
 
 @router.post("/detect")
 async def detect(
     file: UploadFile = File(...),
     animal_type: str = Form(...),
+    user: UserPayload = Depends(get_current_user),
 ):
-    return await _analyze_upload(file, animal_type)
+    farmer_id = postgres_service.resolve_or_create_farmer_scope_id(user.user_id)
+    return await _analyze_upload(file, animal_type, farmer_id)
 
 
 @router.post("/scan/{animal_type}")
 async def analyze_legacy(
     animal_type: str,
     file: UploadFile = File(...),
+    user: UserPayload = Depends(get_current_user),
 ):
-    return await _analyze_upload(file, animal_type)
+    farmer_id = postgres_service.resolve_or_create_farmer_scope_id(user.user_id)
+    return await _analyze_upload(file, animal_type, farmer_id)
 
 
 @router.get("/scan/result/{scan_id}")

@@ -3,6 +3,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
 import { ArrowLeft, Mail, Lock, User } from 'lucide-react';
+import { login, register } from '../services/authService';
 import logoImg from 'figma:asset/28cc7f8b67ba61bb13e03c30f73fd05e9d3d8a2c.png';
 
 interface LoginPageProps {
@@ -15,46 +16,79 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState('farm-owner');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; name?: string }>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validatePassword = (value: string): string | null => {
+    if (value.length < 8) return 'Password must be at least 8 characters.';
+    if (!/[A-Z]/.test(value)) return 'Password must contain at least one uppercase letter.';
+    if (!/[a-z]/.test(value)) return 'Password must contain at least one lowercase letter.';
+    if (!/\d/.test(value)) return 'Password must contain at least one number.';
+    if (!/[^A-Za-z0-9]/.test(value)) return 'Password must contain at least one special character.';
+    return null;
+  };
+
+  const mapRoleToUi = (roleValue: 'farm_owner' | 'veterinarian' | 'authority'):
+    'Farm Owner' | 'Veterinarian' | 'Authority' => {
+    if (roleValue === 'veterinarian') return 'Veterinarian';
+    if (roleValue === 'authority') return 'Authority';
+    return 'Farm Owner';
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLogin) {
-      // Default login credentials - map email to role
-      let userRole: 'Farm Owner' | 'Veterinarian' | 'Authority' = 'Farm Owner';
-      let userName = name || 'Demo User';
-      
-      if (email === 'farm@kavach.in' || email === '' || !email) {
-        userRole = 'Farm Owner';
-        userName = 'Rajesh Patel';
-      } else if (email === 'vet@kavach.in') {
-        userRole = 'Veterinarian';
-        userName = 'Dr. Priya Sharma';
-      } else if (email === 'authority@kavach.in') {
-        userRole = 'Authority';
-        userName = 'Suresh Kumar';
-      }
-      
-      onLogin({ name: userName, role: userRole, email: email || 'farm@kavach.in' });
-    } else {
-      // Register flow - convert role string to proper type
-      let userRole: 'Farm Owner' | 'Veterinarian' | 'Authority' = 'Farm Owner';
-      
-      if (role === 'vet') {
-        userRole = 'Veterinarian';
-      } else if (role === 'authority') {
-        userRole = 'Authority';
+
+    setFormError(null);
+    const nextErrors: { email?: string; password?: string; name?: string } = {};
+
+    if (!email.trim()) {
+      nextErrors.email = 'Email is required.';
+    }
+
+    if (!password) {
+      nextErrors.password = 'Password is required.';
+    } else if (!isLogin) {
+      const passwordError = validatePassword(password);
+      if (passwordError) nextErrors.password = passwordError;
+    }
+
+    if (!isLogin && name.trim().length < 2) {
+      nextErrors.name = 'Full name must be at least 2 characters.';
+    }
+
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setIsSubmitting(true);
+    try {
+      if (isLogin) {
+        const user = await login({ email: email.trim().toLowerCase(), password });
+        onLogin({ name: user.full_name, role: mapRoleToUi(user.role), email: user.email });
       } else {
-        userRole = 'Farm Owner';
+        await register({
+          full_name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role: 'farm_owner',
+          password,
+          agreed_to_terms: true,
+          country: 'India',
+        });
+        const user = await login({ email: email.trim().toLowerCase(), password });
+        onLogin({ name: user.full_name, role: mapRoleToUi(user.role), email: user.email });
       }
-      
-      onLogin({ name: name || 'Demo User', role: userRole, email: email || 'demo@kavach.in' });
+    } catch (err: any) {
+      const message = Array.isArray(err) && err.length > 0
+        ? err[0].message
+        : err?.message || 'Authentication failed. Please try again.';
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleGoogleLogin = () => {
-    // Simulate Google login - default to farm owner
-    onLogin({ name: 'Demo User', role: 'Farm Owner', email: 'demo@kavach.in' });
+    alert('Google login is not configured yet. Please use email and password.');
   };
 
   return (
@@ -111,11 +145,14 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
                       type="text"
                       placeholder="Enter your full name"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="pl-12 h-11 rounded-2xl border-[#E5E3DC] focus:border-[#1B5E42] focus:ring-[#1B5E42]"
-                      required
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                      }}
+                      className={`pl-12 h-11 rounded-2xl focus:border-[#1B5E42] focus:ring-[#1B5E42] ${fieldErrors.name ? 'border-red-500' : 'border-[#E5E3DC]'}`}
                     />
                   </div>
+                  {fieldErrors.name && <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}
                 </div>
               )}
 
@@ -127,10 +164,14 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
                     type="email"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-12 h-11 rounded-2xl border-[#E5E3DC] focus:border-[#1B5E42] focus:ring-[#1B5E42]"
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                    }}
+                    className={`pl-12 h-11 rounded-2xl focus:border-[#1B5E42] focus:ring-[#1B5E42] ${fieldErrors.email ? 'border-red-500' : 'border-[#E5E3DC]'}`}
                   />
                 </div>
+                {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
               </div>
 
               <div>
@@ -141,24 +182,34 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-12 h-11 rounded-2xl border-[#E5E3DC] focus:border-[#1B5E42] focus:ring-[#1B5E42]"
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                    }}
+                    className={`pl-12 h-11 rounded-2xl focus:border-[#1B5E42] focus:ring-[#1B5E42] ${fieldErrors.password ? 'border-red-500' : 'border-[#E5E3DC]'}`}
                   />
                 </div>
+                {!isLogin && (
+                  <p className="mt-1 text-xs text-[#7A7A6E]">
+                    Use at least 8 chars with uppercase, lowercase, number, and special character.
+                  </p>
+                )}
+                {fieldErrors.password && <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>}
               </div>
+
+              {formError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
 
               {!isLogin && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-1.5">I am a</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full h-11 px-4 rounded-2xl border border-[#E5E3DC] focus:border-[#1B5E42] focus:ring-[#1B5E42] text-gray-900"
-                  >
-                    <option value="farm-owner">Farm Owner</option>
-                    <option value="vet">Veterinarian</option>
-                    <option value="authority">Government Authority</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-900 mb-1.5">Account Type</label>
+                  <label className="flex items-center gap-2 rounded-xl border border-[#E5E3DC] px-3 py-2 text-sm text-gray-900">
+                    <input type="checkbox" className="h-4 w-4 rounded border-[#E5E3DC] text-[#1B5E42] focus:ring-[#1B5E42]" checked readOnly />
+                    I am a Farm Owner
+                  </label>
                 </div>
               )}
 
@@ -176,12 +227,13 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
 
               <Button
                 type="submit"
+                disabled={isSubmitting}
                 className="w-full h-11 rounded-full text-white text-base"
                 style={{
                   background: 'linear-gradient(90deg, #1B5E42 0%, #E8A838 100%)',
                 }}
               >
-                {isLogin ? 'Sign In' : 'Create Account'}
+                {isSubmitting ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
               </Button>
 
               <div className="relative my-4">

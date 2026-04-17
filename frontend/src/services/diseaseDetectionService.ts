@@ -1,3 +1,5 @@
+import { getAccessToken } from './authService';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const API_URL = `${API_BASE}/api/v1`;
 
@@ -12,7 +14,7 @@ export interface VLMAnalysisResult {
   fallback_reason?: string;
   detection_id?: number;
   case_id?: number;
-  review_status?: 'pending' | 'safe' | 'not_safe' | 'other';
+  review_status?: 'pending' | 'pending_review' | 'safe' | 'not_safe' | 'unsafe' | 'other' | 'needs_followup';
   created_at?: string;
 }
 
@@ -28,9 +30,11 @@ export async function analyzeImage(
   formData.append('animal_type', animalType.toLowerCase());
 
   try {
+    const token = getAccessToken();
     const res = await fetch(`${API_URL}/detect`, {
       method: 'POST',
       body: formData,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     
     if (!res.ok) {

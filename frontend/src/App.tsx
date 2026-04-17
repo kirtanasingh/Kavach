@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Header } from "./components/Header";
 import { LandingPage } from "./components/LandingPage";
@@ -17,6 +17,8 @@ import { AMULoggingPage } from "./components/AMULoggingPage";
 import { WithdrawalTrackerPage } from "./components/WithdrawalTrackerPage";
 import { ComplianceDashboard } from "./components/ComplianceDashboard";
 import { TrendAnalytics } from "./components/TrendAnalytics";
+import { ProfileScreen } from "./components/ProfileScreen";
+import { logout, restoreSession, type UserProfile } from "./services/authService";
 
 // Shared task interface
 interface Task {
@@ -37,6 +39,8 @@ const SCREEN_TO_PATH: Record<string, string> = {
   services: '/services',
   login: '/login',
   register: '/register',
+  dashboard: '/dashboard',
+  profile: '/profile',
   'farm-details': '/onboarding/farm-details',
   'risk-assessment': '/onboarding/risk-assessment',
   'farm-owner-dashboard': '/dashboard',
@@ -58,6 +62,7 @@ function getScreenFromPath(pathname: string): string {
     ['/services', 'services'],
     ['/login', 'login'],
     ['/register', 'register'],
+    ['/profile', 'profile'],
     ['/onboarding/farm-details', 'farm-details'],
     ['/onboarding/risk-assessment', 'risk-assessment'],
     ['/dashboard/vet', 'vet-dashboard'],
@@ -84,6 +89,26 @@ function AppContent() {
     role: 'Farm Owner' | 'Veterinarian' | 'Authority';
     email?: string;
   } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const mapRoleToUi = (role: UserProfile['role']): 'Farm Owner' | 'Veterinarian' | 'Authority' => {
+    if (role === 'veterinarian') return 'Veterinarian';
+    if (role === 'authority') return 'Authority';
+    return 'Farm Owner';
+  };
+
+  useEffect(() => {
+    restoreSession()
+      .then((sessionUser) => {
+        if (!sessionUser) return;
+        setUser({
+          name: sessionUser.full_name,
+          role: mapRoleToUi(sessionUser.role),
+          email: sessionUser.email,
+        });
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
 
   // Shared tasks state used by farm-owner task views.
   const [tasks, setTasks] = useState<Task[]>([
@@ -176,7 +201,8 @@ function AppContent() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout();
     setUser(null);
     navigate('/login');
   };
@@ -199,6 +225,7 @@ function AppContent() {
     'marketing',
     'login',
     'register',
+    'profile',
     'farm-details',
     'risk-assessment',
     'farm-owner-dashboard',
@@ -211,6 +238,10 @@ function AppContent() {
     'trend-analytics',
     'disease-detection',
   ].includes(currentScreen);
+
+  if (authLoading) {
+    return <div className="min-h-screen grid place-items-center">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -225,6 +256,16 @@ function AppContent() {
         <Route path="/services" element={<ServicesPage onNavigate={navigateByScreen} />} />
         <Route path="/login" element={<LoginPage onNavigate={navigateByScreen} onLogin={handleLogin} />} />
         <Route path="/register" element={<RegisterPage onNavigate={navigateByScreen} onRegister={handleRegister} />} />
+        <Route
+          path="/profile"
+          element={
+            user ? (
+              <ProfileScreen onNavigate={navigateByScreen} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
 
         <Route
           path="/onboarding/farm-details"
@@ -290,7 +331,12 @@ function AppContent() {
           path="/dashboard/authority"
           element={
             user ? (
-              <AuthorityDashboard onNavigate={navigateByScreen} onLogout={handleLogout} userName={user.name} />
+              <AuthorityDashboard
+                onNavigate={navigateByScreen}
+                onLogout={handleLogout}
+                userName={user.name}
+                userEmail={user.email}
+              />
             ) : (
               <Navigate to="/login" replace />
             )

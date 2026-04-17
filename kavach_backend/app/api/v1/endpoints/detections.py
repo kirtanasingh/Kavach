@@ -35,7 +35,7 @@ async def get_detections(
     status_filter: str = Query(
         "pending_review",
         alias="status",
-        pattern="^(pending_review|queued|processing|processed|completed|flagged|manual_review|failed)$",
+        pattern="^(pending_review|queued|processing|processed|completed|flagged|manual_review|failed|safe|not_safe|other|all)$",
     ),
     user: UserPayload = Depends(get_current_user),
     limit: int = Query(100, ge=1, le=1000)
@@ -43,13 +43,11 @@ async def get_detections(
     """
     Retrieve detections for vet review workflows.
     """
-    if status_filter == "pending_review":
-        # Get pending review queue for vets
-        if user.role not in ["Veterinarian", "Authority"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only veterinarians and authorities can view pending reviews"
-            )
+    if user.role not in ["Veterinarian", "Authority"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only veterinarians and authorities can view detections for review"
+        )
 
     try:
         return postgres_service.list_vlm_review_items(status=status_filter, limit=limit)
@@ -61,19 +59,33 @@ async def get_detections(
 @router.get("/detections/history")
 async def get_detection_history(
     limit: int = Query(200, ge=1, le=1000),
+    user: UserPayload = Depends(get_current_user),
 ):
     """Retrieve persisted farmer detection history."""
     try:
-        return postgres_service.list_farmer_detection_history(limit=limit)
+        farmer_id = postgres_service.resolve_or_create_farmer_scope_id(user.user_id)
+        return postgres_service.list_farmer_detection_history(limit=limit, farmer_id=farmer_id)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Detection history unavailable: {exc}") from exc
 
 
+@router.delete("/detections/history")
+async def clear_detection_history(user: UserPayload = Depends(get_current_user)):
+    """Clear farmer detection history from persistent storage."""
+    try:
+        farmer_id = postgres_service.resolve_or_create_farmer_scope_id(user.user_id)
+        deleted = postgres_service.clear_farmer_detection_history(farmer_id=farmer_id)
+        return {"deleted": deleted}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Clear history failed: {exc}") from exc
+
+
 @router.delete("/detections/{detection_id}")
-async def delete_detection_record(detection_id: int):
+async def delete_detection_record(detection_id: int, user: UserPayload = Depends(get_current_user)):
     """Delete one persisted detection record from history."""
     try:
-        deleted = postgres_service.delete_detection(detection_id)
+        farmer_id = postgres_service.resolve_or_create_farmer_scope_id(user.user_id)
+        deleted = postgres_service.delete_detection(detection_id, farmer_id=farmer_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Detection record not found")
         return {"deleted": True, "id": detection_id}
@@ -81,16 +93,6 @@ async def delete_detection_record(detection_id: int):
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Delete failed: {exc}") from exc
-
-
-@router.delete("/detections/history")
-async def clear_detection_history():
-    """Clear farmer detection history from persistent storage."""
-    try:
-        deleted = postgres_service.clear_farmer_detection_history()
-        return {"deleted": deleted}
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Clear history failed: {exc}") from exc
 
 
 @router.get("/cases")
@@ -154,6 +156,12 @@ async def submit_annotation(
             review_status = "not_safe"
         else:
             review_status = "other"
+
+    review_status = review_status.lower()
+    if review_status == "unsafe":
+        review_status = "not_safe"
+    elif review_status == "needs_followup":
+        review_status = "other"
 
     if review_status not in {"safe", "not_safe", "other"}:
         raise HTTPException(status_code=400, detail="review_status must be safe, not_safe, or other")

@@ -1,3 +1,5 @@
+import { getAccessToken } from './authService';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const API_URL = `${API_BASE}/api/v1`;
 
@@ -11,7 +13,7 @@ export interface DetectionRecord {
   recommendation: string;
   created_at: string;
   updated_at?: string;
-  review_status?: 'pending' | 'safe' | 'not_safe' | 'other' | string;
+  review_status?: 'pending' | 'pending_review' | 'safe' | 'not_safe' | 'unsafe' | 'other' | 'needs_followup' | string;
   vet_note?: string | null;
 }
 
@@ -58,23 +60,31 @@ export interface AnalyticsPayload {
 }
 
 const authHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('token') || '';
-  return token ? { Authorization: `Bearer ${token}` } : { Authorization: 'Bearer demo-token' };
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 export async function fetchFarmerDetectionHistory(limit = 200): Promise<DetectionRecord[]> {
-  const res = await fetch(`${API_URL}/detections/history?limit=${limit}`);
+  const res = await fetch(`${API_URL}/detections/history?limit=${limit}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to load detection history');
   return res.json();
 }
 
 export async function deleteFarmerDetection(detectionId: string | number): Promise<void> {
-  const res = await fetch(`${API_URL}/detections/${detectionId}`, { method: 'DELETE' });
+  const res = await fetch(`${API_URL}/detections/${detectionId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to delete detection');
 }
 
 export async function clearFarmerDetectionHistory(): Promise<void> {
-  const res = await fetch(`${API_URL}/detections/history`, { method: 'DELETE' });
+  const res = await fetch(`${API_URL}/detections/history`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to clear detection history');
 }
 

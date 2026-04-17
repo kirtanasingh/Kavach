@@ -8,8 +8,12 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.endpoints import scan, detections, ml_classify
+from app.routers import auth, farm_owner, vet, authority_contact_tracing
 from app.core.config import settings
 from app.services.analysis_service import analyze
+import app.models.auth  # noqa: F401
+import app.models.farm_owner  # noqa: F401
+import app.models.vet  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -21,16 +25,21 @@ app = FastAPI(
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins in development
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$|^null$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include API routers
+app.include_router(auth.router, prefix=settings.API_V1_STR, tags=["auth"])
 app.include_router(scan.router, prefix=settings.API_V1_STR, tags=["scan"])
 app.include_router(detections.router, prefix=settings.API_V1_STR, tags=["detections"])
 app.include_router(ml_classify.router, prefix=settings.API_V1_STR, tags=["ml"])
+app.include_router(farm_owner.router, prefix=settings.API_V1_STR)
+app.include_router(vet.router, prefix=settings.API_V1_STR)
+app.include_router(authority_contact_tracing.router, prefix=settings.API_PREFIX)
 
 
 @app.on_event("startup")

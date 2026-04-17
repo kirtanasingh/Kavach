@@ -206,8 +206,7 @@ export function AlertSystem({ userRole, userName }: AlertSystemProps) {
 
   // Initialize alerts from backend or fallback to mock data
   useEffect(() => {
-    const token = localStorage.getItem('token') || '';
-    fetchAlerts(token)
+    fetchAlerts()
       .then(data => {
         const normalizedAlerts = data.map(raw => ({
           ...normalizeAlert(raw),

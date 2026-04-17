@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+import zlib
 
 import psycopg
 from psycopg.rows import dict_row
@@ -12,55 +13,29 @@ from app.core.config import settings
 class PostgresService:
     """Service wrapper for persisted detection pipeline data in PostgreSQL."""
 
+    DEFAULT_FARMER_ID = 1
+    DEFAULT_VET_ID = 2
+
     def _connect(self):
         return psycopg.connect(settings.POSTGRES_DSN, row_factory=dict_row)
 
     def _bootstrap_defaults(self, conn) -> tuple[int, int, int]:
-        """Ensure default farmer, vet, and one animal exist for demo/local auth flows."""
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO users (name, email, role)
-                VALUES (%s, %s, 'farmer')
-                ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-                RETURNING id
-                """,
-                ("Demo Farmer", "farmer@kavach.local"),
-            )
-            farmer_id = int(cur.fetchone()["id"])
+        """Return default IDs for legacy detection tables.
 
-            cur.execute(
-                """
-                INSERT INTO users (name, email, role)
-                VALUES (%s, %s, 'vet')
-                ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-                RETURNING id
-                """,
-                ("Demo Vet", "vet@kavach.local"),
-            )
-            vet_id = int(cur.fetchone()["id"])
+        Animal linkage is optional for scan persistence; avoid creating animals
+        because newer schema uses UUID farm-linked animals.
+        """
+        return self.DEFAULT_FARMER_ID, self.DEFAULT_VET_ID, None
 
-            cur.execute(
-                """
-                SELECT id FROM animals WHERE farmer_id = %s ORDER BY created_at ASC LIMIT 1
-                """,
-                (farmer_id,),
-            )
-            animal_row = cur.fetchone()
-            if animal_row:
-                animal_id = int(animal_row["id"])
-            else:
-                cur.execute(
-                    """
-                    INSERT INTO animals (farmer_id, animal_name, species, tag_number)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id
-                    """,
-                    (farmer_id, "Default Animal", "pig", f"AN-{farmer_id}-001"),
-                )
-                animal_id = int(cur.fetchone()["id"])
+    def resolve_or_create_farmer_scope_id(self, scope_key: str) -> int:
+        normalized_scope = (scope_key or "").strip()
+        if not normalized_scope:
+            return self.DEFAULT_FARMER_ID
 
-        return farmer_id, vet_id, animal_id
+        # Use a deterministic negative int ID to avoid collisions with existing
+        # legacy positive farmer IDs already present in detection tables.
+        hashed = zlib.crc32(normalized_scope.encode("utf-8")) & 0x7FFFFFFF
+        return -max(1, int(hashed))
 
     def _as_iso(self, value: Any) -> Optional[str]:
         if isinstance(value, datetime):
@@ -116,7 +91,7 @@ class PostgresService:
                 )
                 detection = dict(cur.fetchone())
 
-                case_status = "closed" if status == "completed" else "open"
+                case_status = "closed" if status == "safe" else "open"
                 cur.execute(
                     """
                     INSERT INTO cases (
@@ -164,14 +139,20 @@ class PostgresService:
                         dr.recommendation,
                         dr.created_at,
                         dr.updated_at,
-                        COALESCE(rv.review_status, 'pending') AS review_status,
-                        rv.vet_note
+                        CASE
+                            WHEN dr.status = 'pending_review' THEN 'pending'
+                            ELSE COALESCE(rv.review_status, dr.status, 'pending')
+                        END AS review_status,
+                        CASE
+                            WHEN dr.status = 'pending_review' THEN NULL
+                            ELSE rv.vet_note
+                        END AS vet_note
                     FROM detection_records dr
                     LEFT JOIN LATERAL (
                         SELECT review_status, vet_note
                         FROM detection_reviews
                         WHERE detection_id = dr.id
-                        ORDER BY reviewed_at DESC
+                        ORDER BY reviewed_at DESC, updated_at DESC, id DESC
                         LIMIT 1
                     ) rv ON TRUE
                     WHERE dr.farmer_id = %s
@@ -194,8 +175,23 @@ class PostgresService:
 
             with conn.cursor() as cur:
                 cur.execute(
-                    "DELETE FROM detection_records WHERE id = %s AND farmer_id = %s",
+                    "SELECT 1 FROM detection_records WHERE id = %s AND farmer_id = %s",
                     (detection_id, resolved_farmer_id),
+                )
+                if not cur.fetchone():
+                    return False
+
+                cur.execute(
+                    "DELETE FROM detection_reviews WHERE detection_id = %s",
+                    (detection_id,),
+                )
+                cur.execute(
+                    "DELETE FROM cases WHERE detection_id = %s",
+                    (detection_id,),
+                )
+                cur.execute(
+                    "DELETE FROM detection_records WHERE id = %s",
+                    (detection_id,),
                 )
                 deleted = cur.rowcount > 0
         return deleted
@@ -206,6 +202,24 @@ class PostgresService:
             resolved_farmer_id = farmer_id or default_farmer_id
 
             with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM detection_reviews
+                    WHERE detection_id IN (
+                        SELECT id FROM detection_records WHERE farmer_id = %s
+                    )
+                    """,
+                    (resolved_farmer_id,),
+                )
+                cur.execute(
+                    """
+                    DELETE FROM cases
+                    WHERE detection_id IN (
+                        SELECT id FROM detection_records WHERE farmer_id = %s
+                    )
+                    """,
+                    (resolved_farmer_id,),
+                )
                 cur.execute("DELETE FROM detection_records WHERE farmer_id = %s", (resolved_farmer_id,))
                 count = cur.rowcount
         return count
@@ -226,28 +240,35 @@ class PostgresService:
                         dr.created_at,
                         c.id AS case_id,
                         c.status AS case_status,
-                        fu.name AS farmer_name,
-                        COALESCE(a.animal_name, a.tag_number, 'Unknown Animal') AS animal_name,
+                        ('Farmer #' || dr.farmer_id::text) AS farmer_name,
+                        COALESCE('Animal #' || dr.animal_id::text, 'Unknown Animal') AS animal_name,
                         COALESCE(rv.review_status, 'pending') AS review_status,
                         rv.vet_note
                     FROM detection_records dr
                     LEFT JOIN cases c ON c.detection_id = dr.id
-                    LEFT JOIN users fu ON fu.id = dr.farmer_id
-                    LEFT JOIN animals a ON a.id = dr.animal_id
                     LEFT JOIN LATERAL (
                         SELECT review_status, vet_note
                         FROM detection_reviews
                         WHERE detection_id = dr.id
-                        ORDER BY reviewed_at DESC
+                        ORDER BY reviewed_at DESC, updated_at DESC, id DESC
                         LIMIT 1
                     ) rv ON TRUE
                 """
 
-                if status == "pending_review":
+                if status == "all":
                     cur.execute(
                         base_query
                         + """
-                        WHERE COALESCE(rv.review_status, 'pending') = 'pending'
+                        ORDER BY dr.created_at DESC
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
+                elif status == "pending_review":
+                    cur.execute(
+                        base_query
+                        + """
+                        WHERE dr.status = 'pending_review'
                         ORDER BY dr.created_at DESC
                         LIMIT %s
                         """,
@@ -257,11 +278,11 @@ class PostgresService:
                     cur.execute(
                         base_query
                         + """
-                        WHERE dr.status = %s OR COALESCE(rv.review_status, 'pending') = %s
+                        WHERE dr.status = %s
                         ORDER BY dr.created_at DESC
                         LIMIT %s
                         """,
-                        (status, status, limit),
+                        (status, limit),
                     )
 
                 rows = [dict(r) for r in cur.fetchall()]
@@ -284,8 +305,8 @@ class PostgresService:
 
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id FROM detection_reviews WHERE detection_id = %s AND vet_id = %s ORDER BY reviewed_at DESC LIMIT 1",
-                    (detection_id, resolved_vet_id),
+                    "SELECT id FROM detection_reviews WHERE detection_id = %s ORDER BY reviewed_at DESC, updated_at DESC, id DESC LIMIT 1",
+                    (detection_id,),
                 )
                 existing = cur.fetchone()
 
@@ -295,11 +316,13 @@ class PostgresService:
                         UPDATE detection_reviews
                         SET review_status = %s,
                             vet_note = %s,
+                            vet_id = %s,
+                            reviewed_at = CURRENT_TIMESTAMP,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s
                         RETURNING *
                         """,
-                        (review_status, vet_note, existing["id"]),
+                        (review_status, vet_note, resolved_vet_id, existing["id"]),
                     )
                 else:
                     cur.execute(
@@ -313,14 +336,9 @@ class PostgresService:
 
                 review = dict(cur.fetchone())
 
-                detection_status = "completed"
-                case_status = "closed"
-                if review_status == "not_safe":
-                    detection_status = "flagged"
-                    case_status = "in_progress"
-                elif review_status == "other":
-                    detection_status = "manual_review"
-                    case_status = "in_progress"
+                # Mirror reviewed verdict to detection status for a consistent lifecycle.
+                detection_status = review_status
+                case_status = "closed" if review_status == "safe" else "in_progress"
 
                 cur.execute(
                     """
@@ -364,21 +382,21 @@ class PostgresService:
                         dr.confidence,
                         dr.severity,
                         dr.status AS detection_status,
-                        fu.name AS farmer_name,
-                        COALESCE(a.animal_name, a.tag_number, 'Unknown Animal') AS animal_name,
-                        vv.name AS vet_name,
+                        ('Farmer #' || c.farmer_id::text) AS farmer_name,
+                        COALESCE('Animal #' || c.animal_id::text, 'Unknown Animal') AS animal_name,
+                        CASE
+                            WHEN c.assigned_vet_id IS NULL THEN NULL
+                            ELSE ('Vet #' || c.assigned_vet_id::text)
+                        END AS vet_name,
                         COALESCE(rv.review_status, 'pending') AS review_status,
                         rv.vet_note
                     FROM cases c
                     JOIN detection_records dr ON dr.id = c.detection_id
-                    LEFT JOIN users fu ON fu.id = c.farmer_id
-                    LEFT JOIN users vv ON vv.id = c.assigned_vet_id
-                    LEFT JOIN animals a ON a.id = c.animal_id
                     LEFT JOIN LATERAL (
                         SELECT review_status, vet_note
                         FROM detection_reviews
                         WHERE detection_id = dr.id
-                        ORDER BY reviewed_at DESC
+                        ORDER BY reviewed_at DESC, updated_at DESC, id DESC
                         LIMIT 1
                     ) rv ON TRUE
                 """
@@ -418,7 +436,7 @@ class PostgresService:
                                (SELECT review_status
                                 FROM detection_reviews rv
                                 WHERE rv.detection_id = dr.id
-                                ORDER BY rv.reviewed_at DESC
+                                ORDER BY rv.reviewed_at DESC, rv.updated_at DESC, rv.id DESC
                                 LIMIT 1) AS review_status
                         FROM detection_records dr
                     ) q

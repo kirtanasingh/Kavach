@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -8,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { AlertTriangle, ArrowLeft, Search, Filter, Calendar, Clock, AlertCircle, CheckCircle, Pill, ShieldCheck, Timer } from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
+import { farmOwnerService, type WithdrawalRecord as ApiWithdrawalRecord } from "../services/farmOwnerService";
 
-interface WithdrawalRecord {
+interface WithdrawalCardRecord {
   id: string;
   animalId: string;
   animalType: 'cattle' | 'pig' | 'poultry';
@@ -30,106 +31,67 @@ interface WithdrawalTrackerPageProps {
   userName: string;
 }
 
-// Mock withdrawal data
-const mockWithdrawalData: WithdrawalRecord[] = [
-  {
-    id: "WD001",
-    animalId: "COW-A123",
-    animalType: "cattle",
-    medicineName: "Amoxicillin",
-    dateAdministered: "2024-01-10",
-    withdrawalPeriodDays: 7,
-    safeCollectionDate: "2024-01-17",
-    complianceStatus: "safe",
-    productType: "milk",
-    batchNumber: "BATCH-001",
-    doseGiven: "500mg",
-    vetName: "Dr. Arjun Patel",
-    notes: "Treatment for mastitis"
-  },
-  {
-    id: "WD002",
-    animalId: "PIG-B456",
-    animalType: "pig",
-    medicineName: "Classical Swine Fever Vaccine",
-    dateAdministered: "2024-01-12",
-    withdrawalPeriodDays: 0,
-    safeCollectionDate: "2024-01-12",
-    complianceStatus: "safe",
-    productType: "meat",
-    doseGiven: "1 dose (LOM strain)",
-    vetName: "Dr. Priya Sharma",
-    notes: "Preventive vaccination for hog cholera prevention"
-  },
-  {
-    id: "WD003",
-    animalId: "HEN-C789",
-    animalType: "poultry",
-    medicineName: "Newcastle Disease Vaccine (LaSota)",
-    dateAdministered: "2024-01-14",
-    withdrawalPeriodDays: 0,
-    safeCollectionDate: "2024-01-14",
-    complianceStatus: "safe",
-    productType: "eggs",
-    doseGiven: "1 dose (LaSota strain)",
-    vetName: "Dr. Arjun Patel",
-    notes: "Newcastle (Ranikhet) prevention - freeze-dried pellets"
-  },
-  {
-    id: "WD004",
-    animalId: "COW-D012",
-    animalType: "cattle",
-    medicineName: "Penicillin G",
-    dateAdministered: "2024-01-08",
-    withdrawalPeriodDays: 4,
-    safeCollectionDate: "2024-01-12",
-    complianceStatus: "non_compliant",
-    productType: "milk",
-    batchNumber: "BATCH-002",
-    doseGiven: "300mg",
-    vetName: "Dr. Priya Sharma",
-    notes: "Milk collected early - disposed"
-  },
-  {
-    id: "WD005",
-    animalId: "PIG-E345",
-    animalType: "pig",
-    medicineName: "Florfenicol",
-    dateAdministered: "2024-01-13",
-    withdrawalPeriodDays: 21,
-    safeCollectionDate: "2024-02-03",
-    complianceStatus: "in_withdrawal",
-    productType: "meat",
-    doseGiven: "400mg",
-    vetName: "Dr. Arjun Patel",
-    notes: "Digestive issues treatment"
-  },
-  {
-    id: "WD006",
-    animalId: "HEN-F678",
-    animalType: "poultry",
-    medicineName: "Tylosin",
-    dateAdministered: "2024-01-09",
-    withdrawalPeriodDays: 3,
-    safeCollectionDate: "2024-01-12",
-    complianceStatus: "safe",
-    productType: "eggs",
-    doseGiven: "150mg",
-    vetName: "Dr. Priya Sharma"
+const toAnimalType = (value?: string): 'cattle' | 'pig' | 'poultry' => {
+  const normalized = (value || "").toLowerCase();
+  if (normalized.includes("cattle") || normalized.includes("cow")) return "cattle";
+  if (normalized.includes("poultry") || normalized.includes("hen") || normalized.includes("chicken")) return "poultry";
+  return "pig";
+};
+
+const toProductType = (animalType: 'cattle' | 'pig' | 'poultry'): 'milk' | 'eggs' | 'meat' => {
+  if (animalType === 'cattle') return 'milk';
+  if (animalType === 'poultry') return 'eggs';
+  return 'meat';
+};
+
+const mapRecord = (record: ApiWithdrawalRecord): WithdrawalCardRecord => {
+  const animalType = toAnimalType(record.notes);
+  const safeCollectionDate = record.safe_after_at ?? record.administered_at;
+  const now = new Date();
+  const safeDate = new Date(safeCollectionDate);
+
+  let complianceStatus: 'safe' | 'in_withdrawal' | 'non_compliant' = 'safe';
+  if (record.violation_flag) {
+    complianceStatus = 'non_compliant';
+  } else if (safeDate.getTime() > now.getTime()) {
+    complianceStatus = 'in_withdrawal';
   }
-];
+
+  return {
+    id: record.id,
+    animalId: record.animal_id ?? 'UNLINKED',
+    animalType,
+    medicineName: record.medicine_name,
+    dateAdministered: record.administered_at,
+    withdrawalPeriodDays: record.withdrawal_days,
+    safeCollectionDate,
+    complianceStatus,
+    productType: toProductType(animalType),
+    doseGiven: '-',
+    vetName: '-',
+    notes: record.notes,
+  };
+};
 
 export function WithdrawalTrackerPage({ onNavigate, userName }: WithdrawalTrackerPageProps) {
+  const [withdrawals, setWithdrawals] = useState<WithdrawalCardRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSpecies, setFilterSpecies] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [selectedRecord, setSelectedRecord] = useState<WithdrawalRecord | null>(null);
-  const [showEarlyCollectionAlert, setShowEarlyCollectionAlert] = useState<WithdrawalRecord | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<WithdrawalCardRecord | null>(null);
+  const [showEarlyCollectionAlert, setShowEarlyCollectionAlert] = useState<WithdrawalCardRecord | null>(null);
+
+  useEffect(() => {
+    farmOwnerService
+      .getWithdrawals()
+      .then((rows) => setWithdrawals(rows.map(mapRecord)))
+      .catch(() => setWithdrawals([]));
+  }, []);
 
   // Calculate days remaining for each record
   const enrichedData = useMemo(() => {
     const today = new Date();
-    return mockWithdrawalData.map(record => {
+    return withdrawals.map(record => {
       const safeDate = new Date(record.safeCollectionDate);
       const adminDate = new Date(record.dateAdministered);
       const daysRemaining = Math.max(0, Math.ceil((safeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
@@ -149,7 +111,7 @@ export function WithdrawalTrackerPage({ onNavigate, userName }: WithdrawalTracke
         progress
       };
     });
-  }, []);
+  }, [withdrawals]);
 
   // Filter and search logic
   const filteredData = useMemo(() => {
@@ -190,11 +152,20 @@ export function WithdrawalTrackerPage({ onNavigate, userName }: WithdrawalTracke
     }
   };
 
-  const handleAttemptCollection = (record: WithdrawalRecord) => {
+  const handleAttemptCollection = async (record: WithdrawalCardRecord) => {
     if (record.complianceStatus === 'in_withdrawal') {
       setShowEarlyCollectionAlert(record);
     } else {
-      alert(`✅ ${record.productType.charAt(0).toUpperCase() + record.productType.slice(1)} collection from ${record.animalId} is SAFE!`);
+      try {
+        const updated = await farmOwnerService.logCollectionAttempt(record.id, {
+          collection_attempted_at: new Date().toISOString(),
+          collection_result: 'safe',
+        });
+        setWithdrawals((prev) => prev.map((w) => (w.id === updated.id ? mapRecord(updated) : w)));
+        alert(`✅ ${record.productType.charAt(0).toUpperCase() + record.productType.slice(1)} collection from ${record.animalId} is SAFE!`);
+      } catch {
+        alert('Unable to log collection attempt.');
+      }
     }
   };
 
