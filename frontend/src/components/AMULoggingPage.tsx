@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -20,6 +20,7 @@ import {
   X,
   Search
 } from "lucide-react";
+import { vetService } from "../services/vetService";
 
 interface AMULoggingPageProps {
   onNavigate: (screen: string) => void;
@@ -338,6 +339,9 @@ const treatmentPurposes = [
 ];
 
 export function AMULoggingPage({ onNavigate, userName }: AMULoggingPageProps) {
+  const [assignedFarmId, setAssignedFarmId] = useState<string>("");
+  const [saveError, setSaveError] = useState<string>("");
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedAnimal, setSelectedAnimal] = useState<typeof mockAnimals[0] | null>(null);
   const [selectedDrug, setSelectedDrug] = useState("");
   const [dosage, setDosage] = useState("");
@@ -348,6 +352,21 @@ export function AMULoggingPage({ onNavigate, userName }: AMULoggingPageProps) {
   const [notes, setNotes] = useState("");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [animalSearch, setAnimalSearch] = useState("");
+
+  useEffect(() => {
+    const loadVetContext = async () => {
+      try {
+        const farms = await vetService.getMyFarms();
+        if (farms.length > 0) {
+          setAssignedFarmId(farms[0].farm_id);
+        }
+      } catch {
+        setAssignedFarmId("");
+      }
+    };
+
+    loadVetContext();
+  }, []);
 
   // Calculate withdrawal period and safe dates
   const getWithdrawalInfo = () => {
@@ -361,18 +380,20 @@ export function AMULoggingPage({ onNavigate, userName }: AMULoggingPageProps) {
     
     if (!withdrawalData) return null;
 
+    const milkHours = "milk" in withdrawalData ? withdrawalData.milk : 0;
+
     const adminDate = new Date(administrationDate);
     const meatSafeDate = new Date(adminDate);
     meatSafeDate.setDate(meatSafeDate.getDate() + withdrawalData.meat);
 
-    const milkSafeDate = withdrawalData.milk > 0 ? new Date(adminDate) : null;
+    const milkSafeDate = milkHours > 0 ? new Date(adminDate) : null;
     if (milkSafeDate) {
-      milkSafeDate.setHours(milkSafeDate.getHours() + withdrawalData.milk);
+      milkSafeDate.setHours(milkSafeDate.getHours() + milkHours);
     }
 
     return {
       meatDays: withdrawalData.meat,
-      milkHours: withdrawalData.milk,
+      milkHours,
       meatSafeDate: meatSafeDate.toLocaleDateString('en-GB'),
       milkSafeDate: milkSafeDate ? milkSafeDate.toLocaleDateString('en-GB') : null
     };
@@ -388,32 +409,36 @@ export function AMULoggingPage({ onNavigate, userName }: AMULoggingPageProps) {
   // Get selected drug details
   const selectedDrugDetails = vaccineDatabase.find(d => d.name === selectedDrug);
 
-  const handleSave = () => {
-    // Here you would typically save to localStorage or send to backend
-    const amuRecord = {
-      id: Date.now(),
-      animalId: selectedAnimal?.id,
-      animalSpecies: selectedAnimal?.species,
-      drug: selectedDrug,
-      drugDetails: selectedDrugDetails,
-      dosage: `${dosage} ${dosageUnit}`,
-      route,
-      purpose,
-      administrationDate,
-      withdrawalInfo,
-      notes,
-      reminderEnabled,
-      vetName: userName,
-      timestamp: new Date().toISOString()
-    };
+  const handleSave = async () => {
+    setSaveError("");
 
-    // Save to localStorage (in a real app, this would go to a database)
-    const existingRecords = JSON.parse(localStorage.getItem('amuRecords') || '[]');
-    existingRecords.push(amuRecord);
-    localStorage.setItem('amuRecords', JSON.stringify(existingRecords));
+    if (!assignedFarmId) {
+      setSaveError("No farm assignment found for this veterinarian account.");
+      return;
+    }
 
-    // Navigate back to vet dashboard
-    onNavigate('vet-dashboard');
+    setIsSaving(true);
+    try {
+      await vetService.createAMULog({
+        farm_id: assignedFarmId,
+        species: (selectedAnimal?.species || "unknown").toLowerCase(),
+        drug_name: selectedDrug,
+        drug_class: selectedDrugDetails?.strain || undefined,
+        route,
+        dosage: parseFloat(dosage),
+        dosage_unit: dosageUnit,
+        purpose,
+        administration_date: administrationDate,
+        withdrawal_period_days: withdrawalInfo?.meatDays || 0,
+        reminder_enabled: reminderEnabled,
+        notes,
+      });
+      onNavigate('vet-dashboard');
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Failed to save AMU log.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const isFormValid = selectedAnimal && selectedDrug && dosage && route && purpose && administrationDate;
@@ -729,11 +754,11 @@ export function AMULoggingPage({ onNavigate, userName }: AMULoggingPageProps) {
         <div className="flex gap-4 pb-8">
           <Button
             onClick={handleSave}
-            disabled={!isFormValid}
+            disabled={!isFormValid || isSaving}
             className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Save className="w-4 h-4 mr-2" />
-            Save AMU Record
+            {isSaving ? "Saving..." : "Save AMU Record"}
           </Button>
           <Button
             variant="outline"
@@ -744,6 +769,15 @@ export function AMULoggingPage({ onNavigate, userName }: AMULoggingPageProps) {
             Cancel
           </Button>
         </div>
+
+        {saveError && (
+          <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600" />
+              <p className="text-sm text-red-800">{saveError}</p>
+            </div>
+          </div>
+        )}
 
         {/* Form Validation Status */}
         {!isFormValid && (

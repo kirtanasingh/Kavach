@@ -6,3 +6,13 @@ build/
 __pycache__/
 *.pyc
 .DS_Store
+venv/
+
+# Local datasets and training outputs (do not commit to git)
+datasets_upload/
+unified_dataset/
+uploads/
+kavach_backend/uploads/
+
+# ML model artifacts
+kavach_backend/ml_models/

@@ -1,164 +1,237 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { ArrowLeft, LogOut, Mail, MapPin, Phone, User } from "lucide-react";
+
+import { getMe, updateMe, type UserProfile } from "../services/authService";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Switch } from "./ui/switch";
-import { ArrowLeft, User, MapPin, Phone, Mail, Settings, HelpCircle, FileText, LogOut } from "lucide-react";
 
 interface ProfileScreenProps {
   onNavigate: (screen: string) => void;
+  onLogout?: () => void;
 }
 
-export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
-  return (
-    <div className="bg-gray-50 min-h-screen">
-      <div className="bg-white px-4 py-6 border-b">
-        <div className="flex items-center space-x-3">
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => onNavigate('dashboard')}
-            className="p-2"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <h1 className="text-xl font-semibold">Profile & Settings</h1>
-        </div>
-      </div>
+type FormState = {
+  full_name: string;
+  phone_number: string;
+  city: string;
+  state: string;
+};
 
-      <div className="p-4">
-        {/* Profile Info */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                <User className="w-8 h-8 text-green-600" />
+const mapRoleToLabel = (role: UserProfile["role"]): "Farm Owner" | "Veterinarian" | "Authority" => {
+  if (role === "veterinarian") return "Veterinarian";
+  if (role === "authority") return "Authority";
+  return "Farm Owner";
+};
+
+const mapRoleToHomeScreen = (role: UserProfile["role"]): string => {
+  if (role === "veterinarian") return "vet-dashboard";
+  if (role === "authority") return "authority-dashboard";
+  return "farm-owner-dashboard";
+};
+
+export function ProfileScreen({ onNavigate, onLogout }: ProfileScreenProps) {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [form, setForm] = useState<FormState>({
+    full_name: "",
+    phone_number: "",
+    city: "",
+    state: "",
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getMe()
+      .then((data) => {
+        if (cancelled) return;
+        setProfile(data);
+        setForm({
+          full_name: data.full_name || "",
+          phone_number: data.phone_number || "",
+          city: data.city || "",
+          state: data.state || "",
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setMessage("Could not load your profile.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const roleLabel = useMemo(() => {
+    if (!profile) return "User";
+    return mapRoleToLabel(profile.role);
+  }, [profile]);
+
+  const onChange = (field: keyof FormState, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!form.full_name.trim()) {
+      setMessage("Full name is required.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const updated = await updateMe({
+        full_name: form.full_name.trim(),
+        phone_number: form.phone_number.trim() || null,
+        city: form.city.trim() || null,
+        state: form.state.trim() || null,
+      });
+      setProfile(updated);
+      setForm({
+        full_name: updated.full_name || "",
+        phone_number: updated.phone_number || "",
+        city: updated.city || "",
+        state: updated.state || "",
+      });
+      setMessage("Profile updated successfully.");
+    } catch (error: any) {
+      const text = Array.isArray(error) && error.length > 0 ? error[0].message : "Failed to update profile.";
+      setMessage(text);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (!profile) {
+      onNavigate("dashboard");
+      return;
+    }
+    onNavigate(mapRoleToHomeScreen(profile.role));
+  };
+
+  if (loading) {
+    return <div className="min-h-screen grid place-items-center text-sm text-gray-600">Loading profile...</div>;
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F7F5F0]">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={handleBack} className="rounded-xl">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Dashboard
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onLogout}
+            className="rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
+        </div>
+
+        <Card className="rounded-2xl border-[#E5E3DC] bg-white shadow-sm">
+          <CardHeader className="border-b border-[#EEE9DD]">
+            <CardTitle className="text-xl font-semibold text-gray-900">Profile Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 p-5 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="grid h-16 w-16 place-items-center rounded-full bg-[#1B5E42] text-white">
+                <User className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">John Farmer</h2>
-                <p className="text-gray-600">Poultry & Pig Farm Owner</p>
+                <h2 className="text-lg font-semibold text-gray-900">{profile?.full_name || "User"}</h2>
+                <p className="text-sm text-[#7A7A6E]">{roleLabel}</p>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" defaultValue="John Farmer" className="mt-1" />
-                </div>
-                
-                <div>
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" defaultValue="+63 912 345 6789" className="mt-1" />
-                </div>
-                
-                <div>
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" defaultValue="john.farmer@example.com" className="mt-1" />
-                </div>
-                
-                <div>
-                  <Label htmlFor="location">Farm Location</Label>
-                  <Input id="location" defaultValue="Laguna, Philippines" className="mt-1" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label htmlFor="full_name">Full Name</Label>
+                <Input
+                  id="full_name"
+                  className="mt-1"
+                  value={form.full_name}
+                  onChange={(event) => onChange("full_name", event.target.value)}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <div className="mt-1 flex items-center gap-2 rounded-xl border border-[#E5E3DC] bg-[#F7F5F0] px-3 py-2 text-sm text-gray-700">
+                  <Mail className="h-4 w-4 text-[#1B5E42]" />
+                  <span className="truncate">{profile?.email}</span>
                 </div>
               </div>
 
-              <Button className="w-full bg-green-600 hover:bg-green-700">
-                Update Profile
+              <div>
+                <Label htmlFor="role">Role</Label>
+                <Input id="role" className="mt-1" value={roleLabel} disabled />
+              </div>
+
+              <div>
+                <Label htmlFor="phone_number">Phone Number</Label>
+                <div className="relative mt-1">
+                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#1B5E42]" />
+                  <Input
+                    id="phone_number"
+                    className="pl-9"
+                    value={form.phone_number}
+                    onChange={(event) => onChange("phone_number", event.target.value)}
+                    placeholder="+919876543210"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="city">City</Label>
+                <div className="relative mt-1">
+                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#1B5E42]" />
+                  <Input
+                    id="city"
+                    className="pl-9"
+                    value={form.city}
+                    onChange={(event) => onChange("city", event.target.value)}
+                    placeholder="City"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="state">State</Label>
+                <Input
+                  id="state"
+                  className="mt-1"
+                  value={form.state}
+                  onChange={(event) => onChange("state", event.target.value)}
+                  placeholder="State"
+                />
+              </div>
+            </div>
+
+            {message && <p className="text-sm text-[#1B5E42]">{message}</p>}
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={handleBack} className="rounded-xl">
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={saving} className="rounded-xl bg-[#1B5E42] hover:bg-[#174F37]">
+                {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </CardContent>
         </Card>
-
-        {/* Farm Details */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Farm Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="farm-type">Farm Type</Label>
-                <Input id="farm-type" defaultValue="Mixed Farm" className="mt-1" />
-              </div>
-              
-              <div>
-                <Label htmlFor="animal-count">Total Animals</Label>
-                <Input id="animal-count" defaultValue="250" className="mt-1" />
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="farm-size">Farm Size (hectares)</Label>
-              <Input id="farm-size" defaultValue="3.5" className="mt-1" />
-            </div>
-
-            <Button variant="outline" className="w-full">
-              Update Farm Details
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Settings */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>App Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Dark Mode</p>
-                <p className="text-sm text-gray-600">Switch to dark theme</p>
-              </div>
-              <Switch />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Automatic Backups</p>
-                <p className="text-sm text-gray-600">Backup your data regularly</p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Location Services</p>
-                <p className="text-sm text-gray-600">Allow location-based alerts</p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <div className="space-y-3">
-          <Button variant="outline" className="w-full justify-start">
-            <HelpCircle className="w-5 h-5 mr-3" />
-            Help & Support
-          </Button>
-          
-          <Button variant="outline" className="w-full justify-start">
-            <FileText className="w-5 h-5 mr-3" />
-            Privacy Policy
-          </Button>
-          
-          <Button variant="outline" className="w-full justify-start">
-            <Settings className="w-5 h-5 mr-3" />
-            App Settings
-          </Button>
-          
-          <Button variant="outline" className="w-full justify-start text-red-600 border-red-200 hover:bg-red-50">
-            <LogOut className="w-5 h-5 mr-3" />
-            Sign Out
-          </Button>
-        </div>
-
-        {/* App Version */}
-        <div className="text-center mt-8 text-sm text-gray-500">
-          <p>Kavach v1.2.0</p>
-          <p>© 2025 Kavach - Farm Biosecurity Platform</p>
-        </div>
       </div>
     </div>
   );

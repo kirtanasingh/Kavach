@@ -2,12 +2,12 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Label } from "./ui/label";
 import { ArrowLeft, ArrowRight, CheckCircle, Shield, AlertTriangle, TrendingUp, Target } from "lucide-react";
-import { useState } from "react";
-import { mockDB } from "../services/mockDatabase";
+import { useEffect, useState } from "react";
+import { farmOwnerService } from "../services/farmOwnerService";
 
 interface RiskAssessmentPageProps {
   onNavigate: (screen: string) => void;
-  onComplete: (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' }) => void;
+  onComplete: (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority' }) => void;
   userEmail: string;
   userName: string;
 }
@@ -122,6 +122,21 @@ export function RiskAssessmentPage({ onNavigate, onComplete, userEmail, userName
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
+  useEffect(() => {
+    farmOwnerService
+      .getRiskAssessment()
+      .then((rows) => {
+        const existing: { [key: string]: boolean } = {};
+        rows.forEach((row) => {
+          if (typeof row.answer_boolean === "boolean") {
+            existing[row.question_key] = row.answer_boolean;
+          }
+        });
+        setAnswers(existing);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const handleAnswer = (answer: boolean) => {
     setAnswers(prev => ({
       ...prev,
@@ -186,22 +201,16 @@ export function RiskAssessmentPage({ onNavigate, onComplete, userEmail, userName
     setIsSubmitting(true);
     
     try {
-      // Save risk assessment to mock database
-      const result = mockDB.saveRiskAssessment(userEmail, {
-        answers,
-        score: riskScore,
-        completedAt: new Date().toISOString()
+      const payload = Object.entries(answers).map(([question_key, answer_boolean]) => ({
+        question_key,
+        answer_boolean,
+      }));
+      await farmOwnerService.submitRiskAssessment(payload, riskScore);
+
+      onComplete({
+        name: userName,
+        role: 'Farm Owner'
       });
-      
-      if (result.success) {
-        // Complete onboarding and redirect to dashboard
-        onComplete({
-          name: userName,
-          role: 'Farm Owner'
-        });
-      } else {
-        alert('Failed to save risk assessment. Please try again.');
-      }
     } catch (error) {
       alert('Failed to save risk assessment. Please try again.');
     }

@@ -1,6 +1,8 @@
 // services/alertService.ts
+import { getAccessToken } from './authService';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = `${API_BASE}/api/v1`;
 
 export interface Alert {
   id: string;
@@ -20,9 +22,10 @@ export interface Alert {
   };
 }
 
-export async function fetchAlerts(token: string): Promise<Alert[]> {
-  const res = await fetch(`${API_BASE}/alerts`, {
-    headers: { Authorization: `Bearer ${token}` }
+export async function fetchAlerts(token?: string): Promise<Alert[]> {
+  const resolvedToken = token || getAccessToken() || '';
+  const res = await fetch(`${API_URL}/alerts`, {
+    headers: resolvedToken ? { Authorization: `Bearer ${resolvedToken}` } : {}
   });
   if (!res.ok) throw new Error('Failed to fetch alerts');
   return res.json();
@@ -31,8 +34,8 @@ export async function fetchAlerts(token: string): Promise<Alert[]> {
 export function normalizeAlert(raw: any): Alert {
   return {
     id: raw.id,
-    type: raw.type,
-    severity: raw.severity,
+    type: raw.type as any,
+    severity: raw.severity as any,
     title: raw.title,
     message: raw.message,
     created_at: raw.created_at,

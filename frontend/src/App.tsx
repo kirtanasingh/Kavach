@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Header } from "./components/Header";
 import { LandingPage } from "./components/LandingPage";
 import { AboutUs } from "./components/AboutUs";
@@ -8,7 +9,6 @@ import { RegisterPage } from "./components/RegisterPage";
 import { MarketingHomepage } from "./components/MarketingHomepage";
 import FarmOwnerDashboard from "./components/FarmOwnerDashboard";
 import FarmOwnerDesktopDashboard from "./components/FarmOwnerDesktopDashboard";
-import { FarmWorkerDashboard } from "./components/FarmWorkerDashboard";
 import { VetDashboard } from "./components/VetDashboard";
 import { AuthorityDashboard } from "./components/AuthorityDashboard";
 import { FarmDetailsPage } from "./components/FarmDetailsPage";
@@ -17,7 +17,8 @@ import { AMULoggingPage } from "./components/AMULoggingPage";
 import { WithdrawalTrackerPage } from "./components/WithdrawalTrackerPage";
 import { ComplianceDashboard } from "./components/ComplianceDashboard";
 import { TrendAnalytics } from "./components/TrendAnalytics";
-import { DiseaseDetectionPage } from "./components/DiseaseDetectionPage";
+import { ProfileScreen } from "./components/ProfileScreen";
+import { logout, restoreSession, type UserProfile } from "./services/authService";
 
 // Shared task interface
 interface Task {
@@ -31,20 +32,90 @@ interface Task {
   assignedBy?: string;
 }
 
-export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('marketing');
+const SCREEN_TO_PATH: Record<string, string> = {
+  marketing: '/marketing',
+  home: '/home',
+  about: '/about',
+  services: '/services',
+  login: '/login',
+  register: '/register',
+  dashboard: '/dashboard',
+  profile: '/profile',
+  'farm-details': '/onboarding/farm-details',
+  'risk-assessment': '/onboarding/risk-assessment',
+  'farm-owner-dashboard': '/dashboard',
+  'vet-dashboard': '/dashboard/vet',
+  'authority-dashboard': '/dashboard/authority',
+  'farm-owner-desktop': '/dashboard/farm-owner-desktop',
+  'amu-logging': '/dashboard/amu-logging',
+  'withdrawal-tracker': '/dashboard/withdrawal-tracker',
+  'compliance-dashboard': '/dashboard/compliance',
+  'trend-analytics': '/dashboard/trend-analytics',
+  'disease-detection': '/dashboard/vlm',
+};
+
+function getScreenFromPath(pathname: string): string {
+  const routeToScreen: Array<[string, string]> = [
+    ['/marketing', 'marketing'],
+    ['/home', 'home'],
+    ['/about', 'about'],
+    ['/services', 'services'],
+    ['/login', 'login'],
+    ['/register', 'register'],
+    ['/profile', 'profile'],
+    ['/onboarding/farm-details', 'farm-details'],
+    ['/onboarding/risk-assessment', 'risk-assessment'],
+    ['/dashboard/vet', 'vet-dashboard'],
+    ['/dashboard/authority', 'authority-dashboard'],
+    ['/dashboard/farm-owner-desktop', 'farm-owner-desktop'],
+    ['/dashboard/amu-logging', 'amu-logging'],
+    ['/dashboard/withdrawal-tracker', 'withdrawal-tracker'],
+    ['/dashboard/compliance', 'compliance-dashboard'],
+    ['/dashboard/trend-analytics', 'trend-analytics'],
+    ['/dashboard/vlm', 'disease-detection'],
+    ['/dashboard', 'farm-owner-dashboard'],
+  ];
+
+  const match = routeToScreen.find(([route]) => pathname === route);
+  return match?.[1] ?? 'home';
+}
+
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [user, setUser] = useState<{
     name: string;
-    role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority';
+    role: 'Farm Owner' | 'Veterinarian' | 'Authority';
     email?: string;
   } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // Shared tasks state - using generic worker names that match common login names
+  const mapRoleToUi = (role: UserProfile['role']): 'Farm Owner' | 'Veterinarian' | 'Authority' => {
+    if (role === 'veterinarian') return 'Veterinarian';
+    if (role === 'authority') return 'Authority';
+    return 'Farm Owner';
+  };
+
+  useEffect(() => {
+    restoreSession()
+      .then((sessionUser) => {
+        if (!sessionUser) return;
+        setUser({
+          name: sessionUser.full_name,
+          role: mapRoleToUi(sessionUser.role),
+          email: sessionUser.email,
+        });
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  // Shared tasks state used by farm-owner task views.
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: 1,
       description: "Clean cattle shed in Building A",
-      worker: "Farm Worker", // Generic name that will match any worker login
+      worker: "Farm Staff",
       status: "pending",
       dueDate: "Today",
       reference: "https://youtube.com/watch?v=cleaning-guide",
@@ -54,7 +125,7 @@ export default function App() {
     {
       id: 2,
       description: "Check water system in pig pens",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "worker_done",
       dueDate: "Today",
       reference: "https://docs.farm.com/water-systems",
@@ -64,7 +135,7 @@ export default function App() {
     {
       id: 3,
       description: "Vaccinate poultry in Building C",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "approved",
       dueDate: "Yesterday",
       reference: "https://youtube.com/watch?v=vaccination-guide",
@@ -74,7 +145,7 @@ export default function App() {
     {
       id: 4,
       description: "Feed distribution - morning round",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "worker_done",
       dueDate: "Today",
       reference: "https://docs.farm.com/feeding-schedule",
@@ -84,7 +155,7 @@ export default function App() {
     {
       id: 5,
       description: "Health check on sick cow in Building B",
-      worker: "Farm Worker",
+      worker: "Farm Staff",
       status: "pending",
       dueDate: "Today",
       reference: "https://youtube.com/watch?v=health-check-guide",
@@ -93,49 +164,47 @@ export default function App() {
     }
   ]);
 
-  const handleLogin = (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority'; email?: string }) => {
+  const navigateByScreen = (screen: string) => {
+    navigate(SCREEN_TO_PATH[screen] ?? '/home');
+  };
+
+  const currentScreen = useMemo(() => getScreenFromPath(location.pathname), [location.pathname]);
+
+  const handleLogin = (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority'; email?: string }) => {
     setUser(userData);
-    // Navigate to appropriate dashboard based on role
     switch (userData.role) {
       case 'Farm Owner':
-        setCurrentScreen('farm-owner-dashboard');
-        break;
-      case 'Farm Worker':
-        setCurrentScreen('farm-worker-dashboard');
+        navigate('/dashboard');
         break;
       case 'Veterinarian':
-        setCurrentScreen('vet-dashboard');
+        navigate('/dashboard/vet');
         break;
       case 'Authority':
-        setCurrentScreen('authority-dashboard');
+        navigate('/dashboard/authority');
         break;
     }
   };
 
-  const handleRegister = (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority'; email?: string }) => {
+  const handleRegister = (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority'; email?: string }) => {
     setUser(userData);
-    // For farm owners, navigate to farm details collection
     if (userData.role === 'Farm Owner') {
-      setCurrentScreen('farm-details');
+      navigate('/onboarding/farm-details');
     } else {
-      // For other roles, go directly to dashboard
       switch (userData.role) {
-        case 'Farm Worker':
-          setCurrentScreen('farm-worker-dashboard');
-          break;
         case 'Veterinarian':
-          setCurrentScreen('vet-dashboard');
+          navigate('/dashboard/vet');
           break;
         case 'Authority':
-          setCurrentScreen('authority-dashboard');
+          navigate('/dashboard/authority');
           break;
       }
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout();
     setUser(null);
-    setCurrentScreen('login');
+    navigate('/login');
   };
 
   // Task management functions
@@ -152,128 +221,199 @@ export default function App() {
     setTasks(prevTasks => [...prevTasks, { ...newTask, id: nextId }]);
   };
 
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'marketing':
-        return <MarketingHomepage onNavigate={setCurrentScreen} />;
-      case 'home':
-        return <LandingPage onNavigate={setCurrentScreen} />;
-      case 'about':
-        return <AboutUs onNavigate={setCurrentScreen} />;
-      case 'services':
-        return <ServicesPage onNavigate={setCurrentScreen} />;
-      case 'login':
-        return <LoginPage onNavigate={setCurrentScreen} onLogin={handleLogin} />;
-      case 'register':
-        return <RegisterPage onNavigate={setCurrentScreen} onRegister={handleRegister} />;
-      case 'farm-details':
-        return user && user.email ? (
-          <FarmDetailsPage 
-            onNavigate={setCurrentScreen} 
-            userEmail={user.email}
-            userName={user.name}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'risk-assessment':
-        return user && user.email ? (
-          <RiskAssessmentPage 
-            onNavigate={setCurrentScreen}
-            onComplete={handleLogin}
-            userEmail={user.email}
-            userName={user.name}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'farm-owner-dashboard':
-        return user ? (
-          <FarmOwnerDashboard 
-            onNavigate={setCurrentScreen} 
-            onLogout={handleLogout}
-            userName={user.name}
-            userEmail={user.email}
-            tasks={tasks}
-            onTaskUpdate={handleTaskUpdate}
-            onAddTask={addNewTask}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'farm-worker-dashboard':
-        return user ? (
-          <FarmWorkerDashboard 
-            onNavigate={setCurrentScreen} 
-            onLogout={handleLogout}
-            userName={user.name}
-            workerName={user.name}
-            userRole={user.role}
-            tasks={tasks}
-            onTaskUpdate={handleTaskUpdate}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'vet-dashboard':
-        return user ? (
-          <VetDashboard 
-            onNavigate={setCurrentScreen} 
-            onLogout={handleLogout}
-            userName={user.name}
-            userEmail={user.email}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'authority-dashboard':
-        return user ? (
-          <AuthorityDashboard 
-            onNavigate={setCurrentScreen} 
-            onLogout={handleLogout}
-            userName={user.name}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'farm-owner-desktop':
-        return <FarmOwnerDesktopDashboard onNavigate={setCurrentScreen} />;
-      case 'amu-logging':
-        return user && user.role === 'Veterinarian' ? (
-          <AMULoggingPage 
-            onNavigate={setCurrentScreen}
-            userName={user.name}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'withdrawal-tracker':
-        return user && user.role === 'Farm Owner' ? (
-          <WithdrawalTrackerPage 
-            onNavigate={setCurrentScreen}
-            userName={user.name}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'compliance-dashboard':
-        return user ? (
-          <ComplianceDashboard 
-            onNavigate={setCurrentScreen}
-            userName={user.name}
-            userRole={user.role}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'trend-analytics':
-        return user && (user.role === 'Authority' || user.role === 'Veterinarian') ? (
-          <TrendAnalytics 
-            onNavigate={setCurrentScreen}
-            userName={user.name}
-            userRole={user.role}
-          />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      case 'disease-detection':
-        return user && user.role === 'Farm Owner' ? (
-          <DiseaseDetectionPage onNavigate={setCurrentScreen} />
-        ) : <LandingPage onNavigate={setCurrentScreen} />;
-      default:
-        return <LandingPage onNavigate={setCurrentScreen} />;
-    }
-  };
+  const showHeader = ![
+    'marketing',
+    'login',
+    'register',
+    'profile',
+    'farm-details',
+    'risk-assessment',
+    'farm-owner-dashboard',
+    'farm-owner-desktop',
+    'vet-dashboard',
+    'authority-dashboard',
+    'amu-logging',
+    'withdrawal-tracker',
+    'compliance-dashboard',
+    'trend-analytics',
+    'disease-detection',
+  ].includes(currentScreen);
 
-  // Hide header for login, register pages, onboarding flow, and dashboards
-  const showHeader = !['marketing', 'login', 'register', 'farm-details', 'risk-assessment', 'farm-owner-dashboard', 'farm-owner-desktop', 'farm-worker-dashboard', 'vet-dashboard', 'authority-dashboard', 'amu-logging', 'withdrawal-tracker', 'compliance-dashboard', 'trend-analytics', 'disease-detection'].includes(currentScreen);
+  if (authLoading) {
+    return <div className="min-h-screen grid place-items-center">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-background">
       {showHeader && (
-        <Header currentScreen={currentScreen} onNavigate={setCurrentScreen} />
+        <Header currentScreen={currentScreen} onNavigate={navigateByScreen} />
       )}
-      {renderScreen()}
+      <Routes>
+        <Route path="/" element={<Navigate to="/marketing" replace />} />
+        <Route path="/marketing" element={<MarketingHomepage onNavigate={navigateByScreen} />} />
+        <Route path="/home" element={<LandingPage onNavigate={navigateByScreen} />} />
+        <Route path="/about" element={<AboutUs onNavigate={navigateByScreen} />} />
+        <Route path="/services" element={<ServicesPage onNavigate={navigateByScreen} />} />
+        <Route path="/login" element={<LoginPage onNavigate={navigateByScreen} onLogin={handleLogin} />} />
+        <Route path="/register" element={<RegisterPage onNavigate={navigateByScreen} onRegister={handleRegister} />} />
+        <Route
+          path="/profile"
+          element={
+            user ? (
+              <ProfileScreen onNavigate={navigateByScreen} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/onboarding/farm-details"
+          element={
+            user && user.email ? (
+              <FarmDetailsPage onNavigate={navigateByScreen} userEmail={user.email} userName={user.name} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/onboarding/risk-assessment"
+          element={
+            user && user.email ? (
+              <RiskAssessmentPage
+                onNavigate={navigateByScreen}
+                onComplete={handleLogin}
+                userEmail={user.email}
+                userName={user.name}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/dashboard"
+          element={
+            user ? (
+              <FarmOwnerDashboard
+                initialNav="home"
+                onNavigate={navigateByScreen}
+                onLogout={handleLogout}
+                userName={user.name}
+                userEmail={user.email}
+                tasks={tasks}
+                onTaskUpdate={handleTaskUpdate}
+                onAddTask={addNewTask}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/dashboard/vet"
+          element={
+            user ? (
+              <VetDashboard
+                onNavigate={navigateByScreen}
+                onLogout={handleLogout}
+                userName={user.name}
+                userEmail={user.email}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/dashboard/authority"
+          element={
+            user ? (
+              <AuthorityDashboard
+                onNavigate={navigateByScreen}
+                onLogout={handleLogout}
+                userName={user.name}
+                userEmail={user.email}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route path="/dashboard/farm-owner-desktop" element={<FarmOwnerDesktopDashboard onNavigate={navigateByScreen} />} />
+
+        <Route
+          path="/dashboard/amu-logging"
+          element={
+            user && user.role === 'Veterinarian' ? (
+              <AMULoggingPage onNavigate={navigateByScreen} userName={user.name} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
+        <Route
+          path="/dashboard/withdrawal-tracker"
+          element={
+            user && user.role === 'Farm Owner' ? (
+              <WithdrawalTrackerPage onNavigate={navigateByScreen} userName={user.name} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
+        <Route
+          path="/dashboard/compliance"
+          element={
+            user ? (
+              <ComplianceDashboard onNavigate={navigateByScreen} userName={user.name} userRole={user.role} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/dashboard/trend-analytics"
+          element={
+            user && (user.role === 'Authority' || user.role === 'Veterinarian') ? (
+              <TrendAnalytics onNavigate={navigateByScreen} userName={user.name} userRole={user.role} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
+        <Route
+          path="/dashboard/vlm"
+          element={
+            user ? (
+              <FarmOwnerDashboard
+                initialNav="detection"
+                onNavigate={navigateByScreen}
+                onLogout={handleLogout}
+                userName={user.name}
+                userEmail={user.email}
+                tasks={tasks}
+                onTaskUpdate={handleTaskUpdate}
+                onAddTask={addNewTask}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route path="*" element={<Navigate to="/marketing" replace />} />
+      </Routes>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }

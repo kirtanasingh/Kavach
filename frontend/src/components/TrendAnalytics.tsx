@@ -21,7 +21,7 @@ import {
 interface TrendAnalyticsProps {
   onNavigate: (screen: string) => void;
   userName: string;
-  userRole: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority';
+  userRole: 'Farm Owner' | 'Veterinarian' | 'Authority';
 }
 
 // Mock trend data
@@ -181,7 +181,6 @@ export function TrendAnalytics({ onNavigate, userName, userRole }: TrendAnalytic
       case 'Authority': return 'authority-dashboard';
       case 'Veterinarian': return 'vet-dashboard';
       case 'Farm Owner': return 'farm-owner-dashboard';
-      case 'Farm Worker': return 'farm-worker-dashboard';
       default: return 'home';
     }
   };

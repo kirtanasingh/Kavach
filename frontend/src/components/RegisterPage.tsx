@@ -2,16 +2,15 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Checkbox } from "./ui/checkbox";
-import { ArrowLeft, Shield, User, Mail, Phone, Calendar, MapPin, Lock, Eye, EyeOff, Navigation, AlertCircle, CheckCircle } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Calendar, MapPin, Lock, Eye, EyeOff, Navigation, AlertCircle, CheckCircle } from "lucide-react";
 import { useState } from "react";
-import { mockDB } from "../services/mockDatabase";
+import { login, register } from "../services/authService";
 import kavachLogo from 'figma:asset/2a4372773a3b5a42d85c8677296ad91523020f1f.png';
 
 interface RegisterPageProps {
   onNavigate: (screen: string) => void;
-  onRegister: (userData: { name: string; role: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority'; email?: string }) => void;
+  onRegister: (userData: { name: string; role: 'Farm Owner' | 'Veterinarian' | 'Authority'; email?: string }) => void;
 }
 
 interface ValidationErrors {
@@ -28,7 +27,6 @@ export function RegisterPage({ onNavigate, onRegister }: RegisterPageProps) {
     email: '',
     phoneNumber: '',
     dateOfBirth: '',
-    role: '',
     streetAddress: '',
     city: '',
     state: '',
@@ -104,10 +102,6 @@ export function RegisterPage({ onNavigate, onRegister }: RegisterPageProps) {
           if (!value) return 'Date of birth is required';
           if (!validateAge(value)) return 'You must be at least 16 years old to register';
         }
-        break;
-      
-      case 'role':
-        if (typeof value === 'string' && !value) return 'Please select your role';
         break;
       
       case 'streetAddress':
@@ -208,37 +202,42 @@ export function RegisterPage({ onNavigate, onRegister }: RegisterPageProps) {
     // If no errors, proceed with registration
     if (Object.keys(newErrors).length === 0) {
       try {
-        // Register user in mock database
-        const result = mockDB.registerUser({
-          fullName: formData.fullName,
-          email: formData.email,
-          phoneNumber: formData.phoneNumber,
-          dateOfBirth: formData.dateOfBirth,
-          role: formData.role, // This will be mapped internally
-          streetAddress: formData.streetAddress,
-          city: formData.city,
-          state: formData.state,
-          postalCode: formData.postalCode,
-          country: formData.country,
-          password: formData.password
+        await register({
+          full_name: formData.fullName,
+          email: formData.email.trim().toLowerCase(),
+          phone_number: formData.phoneNumber || undefined,
+          date_of_birth: formData.dateOfBirth || undefined,
+          role: 'farm_owner',
+          street_address: formData.streetAddress || undefined,
+          city: formData.city || undefined,
+          state: formData.state || undefined,
+          postal_code: formData.postalCode || undefined,
+          country: formData.country || 'India',
+          password: formData.password,
+          agreed_to_terms: formData.agreedToTerms,
         });
 
-        if (result.success && result.user) {
-          // Registration successful, call onRegister with user data including email
-          onRegister({
-            ...result.user,
-            email: formData.email
-          });
-        } else {
-          // Registration failed, show error
-          setErrors({
-            email: result.error || 'Registration failed. Please try again.'
-          });
-        }
-      } catch (error) {
-        setErrors({
-          email: 'Registration failed. Please try again.'
+        const user = await login({
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
         });
+
+        const uiRole = user.role === 'veterinarian'
+          ? 'Veterinarian'
+          : user.role === 'authority'
+          ? 'Authority'
+          : 'Farm Owner';
+
+        onRegister({
+          name: user.full_name,
+          role: uiRole,
+          email: user.email,
+        });
+      } catch (error: any) {
+        const message = Array.isArray(error) && error.length > 0
+          ? error[0].message
+          : (error?.message || 'Registration failed. Please try again.');
+        setErrors({ email: message });
       }
     }
     
@@ -434,35 +433,11 @@ export function RegisterPage({ onNavigate, onRegister }: RegisterPageProps) {
                 )}
               </div>
 
-              {/* Role Selection */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2 text-foreground">
-                  <Shield className="w-4 h-4 text-primary" />
-                  I am a... *
-                </Label>
-                <Select value={formData.role} onValueChange={(value) => handleInputChange('role', value)}>
-                  <SelectTrigger className={`h-12 rounded-2xl bg-input-background focus:ring-2 focus:ring-primary/20 ${
-                    errors.role 
-                      ? 'border-destructive' 
-                      : getFieldValidationState('role') === 'success'
-                      ? 'border-primary'
-                      : 'border-border/50 focus:border-primary'
-                  }`}>
-                    <SelectValue placeholder="Select your role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="farm-owner">Farm Owner</SelectItem>
-                    <SelectItem value="farm-worker">Farm Worker</SelectItem>
-                    <SelectItem value="vet">Veterinarian</SelectItem>
-                    <SelectItem value="authority">Authority/Government</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.role && (
-                  <p className="text-sm text-destructive flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4" />
-                    {errors.role}
-                  </p>
-                )}
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+                <p className="text-sm font-medium text-foreground">Account Type: Farm Owner</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Veterinarian and Authority accounts are managed directly by administrators.
+                </p>
               </div>
 
               {/* Address Information */}

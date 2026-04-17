@@ -38,7 +38,7 @@ interface Alert {
 }
 
 interface AlertSystemProps {
-  userRole: 'Farm Owner' | 'Farm Worker' | 'Veterinarian' | 'Authority';
+  userRole: 'Farm Owner' | 'Veterinarian' | 'Authority';
   userName: string;
 }
 
@@ -95,55 +95,10 @@ const generateMockAlerts = (userRole: string): Alert[] => {
         type: 'task',
         severity: 'info',
         title: '✅ Task completed by worker',
-        message: 'Building A cleaning task has been completed by Farm Worker',
+        message: 'Building A cleaning task has been completed by farm staff',
         timestamp: new Date(now.getTime() - 8 * 60 * 60 * 1000), // 8 hours ago
         isRead: true,
         metadata: { taskId: '1' }
-      }
-    );
-  }
-
-  // Farm Worker specific alerts
-  if (userRole === 'Farm Worker') {
-    baseAlerts.push(
-      {
-        id: 'fw-w001',
-        type: 'task',
-        severity: 'urgent',
-        title: '🚨 High priority task assigned',
-        message: 'Health check required for sick cow in Building B - Due today',
-        timestamp: new Date(now.getTime() - 30 * 60 * 1000), // 30 mins ago
-        isRead: false,
-        metadata: { taskId: '5' }
-      },
-      {
-        id: 'fw-w002',
-        type: 'withdrawal',
-        severity: 'warning',
-        title: '⏱️ Withdrawal period reminder',
-        message: 'Do not milk Cow #A112 - 2 days remaining on withdrawal',
-        timestamp: new Date(now.getTime() - 1 * 60 * 60 * 1000), // 1 hour ago
-        isRead: false,
-        metadata: { animalId: 'A112', daysRemaining: 2 }
-      },
-      {
-        id: 'fw-w003',
-        type: 'approval',
-        severity: 'info',
-        title: '✅ Task approved by owner',
-        message: 'Your vaccination work in Building C has been approved',
-        timestamp: new Date(now.getTime() - 3 * 60 * 60 * 1000), // 3 hours ago
-        isRead: true,
-        metadata: { taskId: '3' }
-      },
-      {
-        id: 'fw-w004',
-        type: 'system',
-        severity: 'info',
-        title: '📚 New training module available',
-        message: 'Biosecurity protocols training module has been updated',
-        timestamp: new Date(now.getTime() - 12 * 60 * 60 * 1000), // 12 hours ago
-        isRead: true
       }
     );
   }
@@ -251,8 +206,7 @@ export function AlertSystem({ userRole, userName }: AlertSystemProps) {
 
   // Initialize alerts from backend or fallback to mock data
   useEffect(() => {
-    const token = localStorage.getItem('token') || '';
-    fetchAlerts(token)
+    fetchAlerts()
       .then(data => {
         const normalizedAlerts = data.map(raw => ({
           ...normalizeAlert(raw),

@@ -1,0 +1,18 @@
+{
+  "0": "cattle_foot_and_mouth",
+  "1": "cattle_healthy",
+  "2": "cattle_lumpy",
+  "3": "cattle_lumpy_skin",
+  "4": "pig_healthy",
+  "5": "pig_infected_bacterial_erysipelas",
+  "6": "pig_infected_bacterial_greasy_pig_disease",
+  "7": "pig_infected_environmental_dermatitis",
+  "8": "pig_infected_environmental_sunburn",
+  "9": "pig_infected_fungal_pityriasis_rosea",
+  "10": "pig_infected_fungal_ringworm",
+  "11": "pig_infected_parasitic_mange",
+  "12": "pig_infected_viral_foot_and_mouth_disease",
+  "13": "pig_infected_viral_swinepox",
+  "14": "poultry_healthy",
+  "15": "poultry_unhealthy"
+}
